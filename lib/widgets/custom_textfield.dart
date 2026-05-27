@@ -47,7 +47,7 @@ class CustomTextField extends StatelessWidget {
         hintText: hintText,
         labelText: labelText,
         hintStyle: TextStyle(
-          color: Appcolors.kgreyColor.withOpacity(0.6),
+          color: Appcolors.kgreyColor.withValues(alpha: 0.6),
           fontSize: 14,
         ),
         labelStyle: const TextStyle(
@@ -55,11 +55,7 @@ class CustomTextField extends StatelessWidget {
           fontSize: 14,
         ),
         prefixIcon: prefixIcon != null
-            ? Icon(
-                prefixIcon,
-                color: Appcolors.kprimarycolor,
-                size: 22,
-              )
+            ? Icon(prefixIcon, color: Appcolors.kprimarycolor, size: 22)
             : null,
         suffixIcon: suffixIcon,
         filled: true,
@@ -72,7 +68,7 @@ class CustomTextField extends StatelessWidget {
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
-            color: Appcolors.kbordercolor.withOpacity(0.3),
+            color: Appcolors.kbordercolor.withValues(alpha: 0.3),
             width: 1.5,
           ),
         ),
@@ -85,17 +81,11 @@ class CustomTextField extends StatelessWidget {
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(
-            color: Appcolors.kredcolor,
-            width: 1.5,
-          ),
+          borderSide: const BorderSide(color: Appcolors.kredcolor, width: 1.5),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(
-            color: Appcolors.kredcolor,
-            width: 2,
-          ),
+          borderSide: const BorderSide(color: Appcolors.kredcolor, width: 2),
         ),
       ),
     );

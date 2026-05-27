@@ -1,3 +1,3 @@
 class Appconstants {
-  static const applogo = 'assets/images/zestylogo_75x@2x.png';
+  static const applogo = 'assets/images/splash_logo.png';
 }

@@ -1,297 +1,398 @@
-import 'dart:ui';
+import 'dart:async';
 
+import 'package:crisant_connect/core/appconstants.dart';
 import 'package:crisant_connect/core/colors.dart';
-import 'package:dhani_communications/core/appconstants.dart';
-import 'package:dhani_communications/core/colors.dart';
-import 'package:dhani_communications/core/responsiveutils.dart';
-import 'package:dhani_communications/features/auth/blocs/send_otp_bloc/send_otp_bloc.dart';
-import 'package:dhani_communications/widgets/custom_textfiield.dart';
+import 'package:crisant_connect/core/routes/approutes.dart';
+import 'package:crisant_connect/features/authentication/blocs/verify_otp_bloc/verify_otp_bloc.dart';
+import 'package:crisant_connect/widgets/app_background.dart';
+import 'package:crisant_connect/widgets/custom_snackbar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+class ScreenOtpPage extends StatefulWidget {
+  final String? mobileNumber;
+
+  const ScreenOtpPage({super.key, this.mobileNumber});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  State<ScreenOtpPage> createState() => _ScreenOtpPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
-  final TextEditingController _phoneController = TextEditingController();
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+class _ScreenOtpPageState extends State<ScreenOtpPage> {
+  static const int _otpLength = 6;
+  static const int _resendSeconds = 30;
+
+  final List<TextEditingController> _controllers = List.generate(
+    _otpLength,
+    (_) => TextEditingController(),
+  );
+  final List<FocusNode> _focusNodes = List.generate(
+    _otpLength,
+    (_) => FocusNode(),
+  );
+
+  Timer? _timer;
+  int _secondsLeft = _resendSeconds;
+
+  bool get _canResend => _secondsLeft == 0;
+  String get _otp => _controllers.map((controller) => controller.text).join();
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+  }
 
   @override
   void dispose() {
-    _phoneController.dispose();
+    _timer?.cancel();
+
+    for (final controller in _controllers) {
+      controller.dispose();
+    }
+
+    for (final focusNode in _focusNodes) {
+      focusNode.dispose();
+    }
+
     super.dispose();
   }
 
-  void _handleSubmit() {
-    if (_formKey.currentState!.validate()) {
-      context.read<SendOtpBloc>().add(
-            SendOtpButtonClickEvent(mobileNumber: _phoneController.text),
-          );
+  void _startTimer() {
+    _timer?.cancel();
+    setState(() => _secondsLeft = _resendSeconds);
+
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_secondsLeft <= 1) {
+        timer.cancel();
+        setState(() => _secondsLeft = 0);
+        return;
+      }
+
+      setState(() => _secondsLeft--);
+    });
+  }
+
+  void _handleOtpChanged(String value, int index) {
+    if (value.length > 1) {
+      _fillOtp(value);
+      return;
+    }
+
+    setState(() {});
+
+    if (value.isNotEmpty && index < _otpLength - 1) {
+      _focusNodes[index + 1].requestFocus();
+    }
+
+    if (_otp.length == _otpLength) {
+      _submitOtp();
     }
   }
 
-  String? _validatePhone(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Please enter your phone number';
+  void _fillOtp(String value) {
+    final digits = value.replaceAll(RegExp(r'\D'), '');
+
+    for (var i = 0; i < _otpLength; i++) {
+      _controllers[i].text = i < digits.length ? digits[i] : '';
     }
-    if (value.length != 10) {
-      return 'Phone number must be 10 digits';
+
+    setState(() {});
+
+    final nextIndex = digits.length >= _otpLength
+        ? _otpLength - 1
+        : digits.length;
+    final safeNextIndex = nextIndex.clamp(0, _otpLength - 1);
+    _focusNodes[safeNextIndex].requestFocus();
+
+    if (_otp.length == _otpLength) {
+      _submitOtp();
     }
-    if (!RegExp(r'^[0-9]+$').hasMatch(value)) {
-      return 'Phone number should contain only digits';
+  }
+
+  KeyEventResult _handleBackspace(KeyEvent event, int index) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey != LogicalKeyboardKey.backspace) {
+      return KeyEventResult.ignored;
     }
-    return null;
+
+    if (_controllers[index].text.isNotEmpty || index == 0) {
+      return KeyEventResult.ignored;
+    }
+
+    _focusNodes[index - 1].requestFocus();
+    _controllers[index - 1].clear();
+    setState(() {});
+
+    return KeyEventResult.handled;
+  }
+
+  Future<void> _submitOtp() async {
+    final mobileNumber = widget.mobileNumber?.trim() ?? "";
+    if (_otp.length != _otpLength || mobileNumber.isEmpty) {
+      if (mobileNumber.isEmpty) {
+        CustomSnackbar.show(
+          context,
+          message: "Mobile number is missing. Please request OTP again.",
+          type: SnackbarType.error,
+        );
+      }
+
+      return;
+    }
+
+    final state = context.read<VerifyOtpBloc>().state;
+    if (state is VerifyOtpLoading) return;
+
+    FocusScope.of(context).unfocus();
+    context.read<VerifyOtpBloc>().add(
+      VerifyOtpRequested(mobileNumber: mobileNumber, otp: _otp),
+    );
+  }
+
+  void _resendOtp() {
+    if (!_canResend) return;
+
+    for (final controller in _controllers) {
+      controller.clear();
+    }
+
+    _focusNodes.first.requestFocus();
+    _startTimer();
+
+    CustomSnackbar.show(
+      context,
+      message: 'OTP resent successfully',
+      type: SnackbarType.success,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
+    final mobileNumber = widget.mobileNumber?.trim();
+    final hasMobileNumber = mobileNumber != null && mobileNumber.isNotEmpty;
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Custom Paint Background Design
-          CustomPaint(
-            painter: LoginBackgroundPainter(),
-            size: Size(screenWidth, screenHeight),
-          ),
+    return BlocConsumer<VerifyOtpBloc, VerifyOtpState>(
+      listener: (context, state) {
+        if (state is VerifyOtpSuccess) {
+          CustomSnackbar.show(
+            context,
+            message: state.message,
+            type: SnackbarType.success,
+          );
+          context.go(Approtes.dashboard);
+        }
 
-          // Main Content
-          SafeArea(
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      SizedBox(height: screenHeight * 0.08),
+        if (state is VerifyOtpFailure) {
+          CustomSnackbar.show(
+            context,
+            message: state.message,
+            type: SnackbarType.error,
+          );
+        }
+      },
+      builder: (context, state) {
+        final isLoading = state is VerifyOtpLoading;
 
-                      Center(
-                        child: Image.asset(
-                          Appconstants.applogo,
-                          height: ResponsiveUtils.hp(30),
-                        ),
-                      ),
-
-                      SizedBox(height: screenHeight * 0.005),
-
-                      // Welcome Text
-                      const Text(
-                        'Welcome Back!',
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Appcolors.kblackcolor,
-                        ),
-                      ),
-
-                      const SizedBox(height: 8),
-
-                      Text(
-                        'Login to continue',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Appcolors.kgreyColor.withOpacity(0.8),
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-
-                      SizedBox(height: screenHeight * 0.06),
-
-                      // Phone Number Field
-                      CustomTextField(
-                        controller: _phoneController,
-                        hintText: 'Enter your phone number',
-                        labelText: 'Phone Number',
-                        prefixIcon: Icons.phone,
-                        keyboardType: TextInputType.phone,
-                        maxLength: 10,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        validator: _validatePhone,
-                      ),
-
-                      SizedBox(height: screenHeight * 0.04),
-
-                      // Submit Button with BLoC
-            // Submit Button with BLoC
-BlocConsumer<SendOtpBloc, SendOtpState>(
-  listener: (context, state) {
-    if (state is SendOtpSuccessState) {
-      context.push(
-        '/otppage',
-        extra: {
-          'phone': '+91 ${_phoneController.text}',
-          'userId': state.executiveId,
-        },
-      );
-    } else if (state is SendOtpErrorState) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(state.message),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  },
-  builder: (context, state) {
-    final isLoading = state is SendOtpLoadingState;
-
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton(
-        onPressed: isLoading ? null : _handleSubmit,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Appcolors.kprimarycolor,
-          foregroundColor: Appcolors.kwhitecolor,
-          elevation: 3,
-          shadowColor: Appcolors.kprimarycolor.withOpacity(0.4),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          disabledBackgroundColor:
-              Appcolors.kprimarycolor.withOpacity(0.6),
-        ),
-        child: isLoading
-            ? const SizedBox(
-                height: 24,
-                width: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    Appcolors.kwhitecolor,
+        return Scaffold(
+          backgroundColor: Appcolors.kwhitecolor,
+          body: AppBackground(
+            opacity: 0.45,
+            child: SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 28,
                   ),
-                ),
-              )
-            : const Text(
-                'Submit',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
-                ),
-              ),
-      ),
-    );
-  },
-),
-
-                      SizedBox(height: screenHeight * 0.03),
-
-                      // Terms & Conditions
-                      Text.rich(
-                        TextSpan(
-                          text: 'By continuing, you agree to our ',
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Center(child: _LogoCard()),
+                        const SizedBox(height: 28),
+                        const Text(
+                          'Verify OTP',
+                          textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 12,
-                            color: Appcolors.kgreyColor.withOpacity(0.7),
+                            color: Appcolors.ktextdark,
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
                           ),
-                          children: const [
-                            TextSpan(
-                              text: 'Terms & Conditions',
-                              style: TextStyle(
-                                color: Appcolors.kprimarycolor,
-                                fontWeight: FontWeight.w600,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          hasMobileNumber
+                              ? 'Enter the 6 digit code sent to +91 $mobileNumber'
+                              : 'Enter the 6 digit code sent to continue',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Appcolors.ktextlight,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 36),
+                        Row(
+                          children: [
+                            for (
+                              var index = 0;
+                              index < _otpLength;
+                              index++
+                            ) ...[
+                              if (index > 0) const SizedBox(width: 8),
+                              Expanded(
+                                child: _OtpBox(
+                                  controller: _controllers[index],
+                                  focusNode: _focusNodes[index],
+                                  onChanged: (value) =>
+                                      _handleOtpChanged(value, index),
+                                  onKeyEvent: (event) =>
+                                      _handleBackspace(event, index),
+                                ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
+                        const SizedBox(height: 28),
+                        SizedBox(
+                          height: 54,
+                          child: ElevatedButton(
+                            onPressed: isLoading || _otp.length != _otpLength
+                                ? null
+                                : _submitOtp,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Appcolors.kprimarycolor,
+                              foregroundColor: Appcolors.kwhitecolor,
+                              disabledBackgroundColor: Appcolors
+                                  .kprimaryLightColor
+                                  .withValues(alpha: 0.6),
+                              disabledForegroundColor: Appcolors.kwhitecolor
+                                  .withValues(alpha: 0.75),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            child: isLoading
+                                ? const SizedBox(
+                                    height: 22,
+                                    width: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.4,
+                                      color: Appcolors.kwhitecolor,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Submit',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        TextButton(
+                          onPressed: _canResend ? _resendOtp : null,
+                          child: Text(
+                            _canResend
+                                ? 'Resend OTP'
+                                : 'Resend OTP in $_secondsLeft seconds',
+                            style: TextStyle(
+                              color: _canResend
+                                  ? Appcolors.kprimarycolor
+                                  : Appcolors.ktextlight,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: () => Navigator.of(context).maybePop(),
+                          child: const Text(
+                            'Change mobile number',
+                            style: TextStyle(
+                              color: Appcolors.ktextlight,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
-// Custom Paint for Background Design
-class LoginBackgroundPainter extends CustomPainter {
+class _LogoCard extends StatelessWidget {
   @override
-  void paint(Canvas canvas, Size size) {
-    // Top Right Circle
-    final paint1 = Paint()
-      ..color = Appcolors.kprimarycolor.withOpacity(0.1)
-      ..style = PaintingStyle.fill;
+  Widget build(BuildContext context) {
+    return Image.asset(Appconstants.applogo, fit: BoxFit.contain, height: 120);
+  }
+}
 
-    canvas.drawCircle(
-      Offset(size.width * 0.9, size.height * 0.1),
-      120,
-      paint1,
+class _OtpBox extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final ValueChanged<String> onChanged;
+  final KeyEventResult Function(KeyEvent event) onKeyEvent;
+
+  const _OtpBox({
+    required this.controller,
+    required this.focusNode,
+    required this.onChanged,
+    required this.onKeyEvent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 56,
+      child: Focus(
+        onKeyEvent: (_, event) => onKeyEvent(event),
+        child: TextField(
+          controller: controller,
+          focusNode: focusNode,
+          keyboardType: TextInputType.number,
+          textInputAction: TextInputAction.next,
+          textAlign: TextAlign.center,
+          maxLength: 1,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          onChanged: onChanged,
+          style: const TextStyle(
+            color: Appcolors.ktextdark,
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+          ),
+          decoration: InputDecoration(
+            counterText: '',
+            filled: true,
+            fillColor: Appcolors.kwhitecolor.withValues(alpha: 0.92),
+            contentPadding: EdgeInsets.zero,
+            enabledBorder: _border(Appcolors.kprimaryLightColor, 0.7),
+            focusedBorder: _border(Appcolors.kprimarycolor, 1),
+          ),
+        ),
+      ),
     );
-
-    // Top Right Small Circle
-    final paint2 = Paint()
-      ..color = Appcolors.kbordercolor.withOpacity(0.15)
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(
-      Offset(size.width * 0.85, size.height * 0.15),
-      60,
-      paint2,
-    );
-
-    // Bottom Left Arc
-    final paint3 = Paint()
-      ..color = Appcolors.ksecondarycolor.withOpacity(0.08)
-      ..style = PaintingStyle.fill;
-
-    final path = Path();
-    path.moveTo(0, size.height * 0.7);
-    path.quadraticBezierTo(
-      size.width * 0.3,
-      size.height * 0.85,
-      size.width * 0.5,
-      size.height * 0.9,
-    );
-    path.lineTo(0, size.height);
-    path.close();
-    canvas.drawPath(path, paint3);
-
-    // Bottom Right Decorative Shape
-    final paint4 = Paint()
-      ..color = Appcolors.kprimarycolor.withOpacity(0.08)
-      ..style = PaintingStyle.fill;
-
-    final path2 = Path();
-    path2.moveTo(size.width, size.height * 0.8);
-    path2.quadraticBezierTo(
-      size.width * 0.7,
-      size.height * 0.85,
-      size.width * 0.6,
-      size.height,
-    );
-    path2.lineTo(size.width, size.height);
-    path2.close();
-    canvas.drawPath(path2, paint4);
-
-    // Decorative dots
-    final dotPaint = Paint()
-      ..color = Appcolors.kbordercolor.withOpacity(0.2)
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(Offset(size.width * 0.15, size.height * 0.3), 8, dotPaint);
-    canvas.drawCircle(Offset(size.width * 0.2, size.height * 0.5), 6, dotPaint);
-    canvas.drawCircle(Offset(size.width * 0.85, size.height * 0.6), 10, dotPaint);
   }
 
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  OutlineInputBorder _border(Color color, double alpha) {
+    return OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(color: color.withValues(alpha: alpha), width: 1.4),
+    );
+  }
 }

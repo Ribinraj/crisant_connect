@@ -1,4 +1,5 @@
-import 'package:calliing_application/core/responsiveutils.dart';
+
+import 'package:crisant_connect/core/responsiveutils.dart';
 import 'package:flutter/material.dart';
 
 class ResponsiveText extends StatelessWidget {
