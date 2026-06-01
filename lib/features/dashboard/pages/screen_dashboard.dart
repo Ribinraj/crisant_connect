@@ -1,12 +1,37 @@
 import 'package:crisant_connect/core/colors.dart';
 import 'package:crisant_connect/core/constants.dart';
 import 'package:crisant_connect/core/responsiveutils.dart';
+import 'package:crisant_connect/features/dashboard/blocs/dashboard_bloc/dashboard_bloc.dart';
+import 'package:crisant_connect/features/dashboard/models/dashboard_response.dart';
 import 'package:crisant_connect/widgets/app_background.dart';
 import 'package:crisant_connect/widgets/crisant_app_bar.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-class ScreenDashboard extends StatelessWidget {
+class ScreenDashboard extends StatefulWidget {
   const ScreenDashboard({super.key});
+
+  @override
+  State<ScreenDashboard> createState() => _ScreenDashboardState();
+}
+
+class _ScreenDashboardState extends State<ScreenDashboard> {
+  late final String _month = _currentMonthKey();
+
+  @override
+  void initState() {
+    super.initState();
+    context.read<DashboardBloc>().add(FetchDashboardRequested(month: _month));
+  }
+
+  static String _currentMonthKey() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}';
+  }
+
+  void _fetchDashboard() {
+    context.read<DashboardBloc>().add(FetchDashboardRequested(month: _month));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -16,20 +41,54 @@ class ScreenDashboard extends StatelessWidget {
       opacity: 0.35,
       child: SafeArea(
         bottom: false,
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            const SliverToBoxAdapter(child: CrisantAppBar()),
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                ResponsiveUtils.wp(4.6),
-                ResponsiveUtils.hp(2),
-                ResponsiveUtils.wp(4.6),
-                ResponsiveUtils.hp(15),
-              ),
-              sliver: const SliverToBoxAdapter(child: _DashboardBody()),
+        child: RefreshIndicator(
+          color: Appcolors.kprimarycolor,
+          onRefresh: () async => _fetchDashboard(),
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
             ),
-          ],
+            slivers: [
+              const SliverToBoxAdapter(child: CrisantAppBar()),
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(
+                  ResponsiveUtils.wp(4.6),
+                  ResponsiveUtils.hp(2),
+                  ResponsiveUtils.wp(4.6),
+                  ResponsiveUtils.hp(15),
+                ),
+                sliver: SliverToBoxAdapter(
+                  child: BlocBuilder<DashboardBloc, DashboardState>(
+                    builder: (context, state) {
+                      if (state is DashboardLoading ||
+                          state is DashboardInitial) {
+                        return const _DashboardLoading();
+                      }
+
+                      if (state is DashboardFailure) {
+                        return _DashboardError(
+                          message: state.message,
+                          onRetry: _fetchDashboard,
+                        );
+                      }
+
+                      final dashboard = state is DashboardSuccess
+                          ? state.dashboard
+                          : null;
+                      if (dashboard == null) {
+                        return _DashboardError(
+                          message: 'Dashboard data unavailable',
+                          onRetry: _fetchDashboard,
+                        );
+                      }
+
+                      return _DashboardBody(dashboard: dashboard);
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -37,7 +96,9 @@ class ScreenDashboard extends StatelessWidget {
 }
 
 class _DashboardBody extends StatelessWidget {
-  const _DashboardBody();
+  final DashboardResponse dashboard;
+
+  const _DashboardBody({required this.dashboard});
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +109,7 @@ class _DashboardBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Good Afternoon Ribin!',
+          'Dashboard',
           style: TextStyle(
             color: const Color(0xFF111827),
             fontSize: titleSize,
@@ -57,7 +118,7 @@ class _DashboardBody extends StatelessWidget {
         ),
         SizedBox(height: ResponsiveUtils.hp(0.8)),
         Text(
-          "Here's what's happening with your content today.",
+          "Here's what's happening with your content this month.",
           style: TextStyle(
             color: const Color(0xFF7A6C66),
             fontSize: subtitleSize,
@@ -66,20 +127,24 @@ class _DashboardBody extends StatelessWidget {
           ),
         ),
         SizedBox(height: ResponsiveUtils.hp(3)),
-        const _StatsGrid(),
+        _StatsGrid(stats: dashboard.stats),
         SizedBox(height: ResponsiveUtils.hp(3)),
-        const _PostingOverviewCard(),
+        _PostingOverviewCard(items: dashboard.monthlyPostingOverview),
+        SizedBox(height: ResponsiveUtils.hp(3)),
+        _PostingGapMonitor(gaps: dashboard.postingGapMonitor),
         SizedBox(height: ResponsiveUtils.hp(3)),
         const _RecentPostsHeader(),
         SizedBox(height: ResponsiveUtils.hp(1.8)),
-        const _RecentPostsList(),
+        _RecentPostsList(posts: dashboard.recentPosts),
       ],
     );
   }
 }
 
 class _StatsGrid extends StatelessWidget {
-  const _StatsGrid();
+  final DashboardStats stats;
+
+  const _StatsGrid({required this.stats});
 
   @override
   Widget build(BuildContext context) {
@@ -87,47 +152,47 @@ class _StatsGrid extends StatelessWidget {
     final spacing = ResponsiveUtils.wp(4).clamp(12, 18).toDouble();
     final cardWidth = (width - ResponsiveUtils.wp(9.2) - spacing) / 2;
     final cardHeight = cardWidth < 165 ? 205.0 : cardWidth * 1.04;
+    final cards = [
+      _StatCard(
+        icon: Icons.groups_rounded,
+        title: 'Number Of\nClients',
+        value: stats.clients.toString(),
+        iconColor: const Color(0xFFA63D08),
+        iconBackground: const Color(0xFFFFF2E8),
+      ),
+      _StatCard(
+        icon: Icons.account_circle_rounded,
+        title: 'Connected\nProfiles',
+        value: stats.connectedProfiles.toString(),
+        iconColor: const Color(0xFF087D80),
+        iconBackground: const Color(0xFFE3F7F6),
+        highlighted: true,
+      ),
+      _StatCard(
+        icon: Icons.send_time_extension_rounded,
+        title: 'Queued Posts',
+        value: stats.queuedPosts.toString(),
+        iconColor: const Color(0xFF58677B),
+        iconBackground: const Color(0xFFF0F4F8),
+      ),
+      _StatCard(
+        icon: Icons.pending_actions_rounded,
+        title: 'Pending\nApprovals',
+        value: stats.pendingApprovals.toString(),
+        iconColor: const Color(0xFF58677B),
+        iconBackground: const Color(0xFFF0F4F8),
+      ),
+    ];
 
     return Wrap(
       spacing: spacing,
       runSpacing: ResponsiveUtils.hp(2.1).clamp(14, 20).toDouble(),
-      children:
-          const [
-                _StatCard(
-                  icon: Icons.groups_rounded,
-                  title: 'Number Of\nClients',
-                  value: '36',
-                  iconColor: Color(0xFFA63D08),
-                  iconBackground: Color(0xFFFFF2E8),
-                ),
-                _StatCard(
-                  icon: Icons.account_circle_rounded,
-                  title: 'Connected\nProfiles',
-                  value: '80',
-                  iconColor: Color(0xFF087D80),
-                  iconBackground: Color(0xFFE3F7F6),
-                  highlighted: true,
-                ),
-                _StatCard(
-                  icon: Icons.send_time_extension_rounded,
-                  title: 'Queued Posts',
-                  value: '0',
-                  iconColor: Color(0xFF58677B),
-                  iconBackground: Color(0xFFF0F4F8),
-                ),
-                _StatCard(
-                  icon: Icons.pending_actions_rounded,
-                  title: 'Pending\nApprovals',
-                  value: '0',
-                  iconColor: Color(0xFF58677B),
-                  iconBackground: Color(0xFFF0F4F8),
-                ),
-              ]
-              .map(
-                (card) =>
-                    SizedBox(width: cardWidth, height: cardHeight, child: card),
-              )
-              .toList(),
+      children: cards
+          .map(
+            (card) =>
+                SizedBox(width: cardWidth, height: cardHeight, child: card),
+          )
+          .toList(),
     );
   }
 }
@@ -237,22 +302,477 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _PostingOverviewCard extends StatelessWidget {
-  const _PostingOverviewCard();
+class _PostingOverviewCard extends StatefulWidget {
+  final List<MonthlyPostingOverviewItem> items;
+
+  const _PostingOverviewCard({required this.items});
+
+  @override
+  State<_PostingOverviewCard> createState() => _PostingOverviewCardState();
+}
+
+class _PostingOverviewCardState extends State<_PostingOverviewCard> {
+  final ScrollController _scrollController = ScrollController();
+  bool _didScrollToRecentDays = false;
+
+  @override
+  void didUpdateWidget(covariant _PostingOverviewCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.items.length != widget.items.length) {
+      _didScrollToRecentDays = false;
+      _scrollToRecentDays();
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToRecentDays() {
+    if (_didScrollToRecentDays || widget.items.length <= 7) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      _didScrollToRecentDays = true;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final bars = <_BarData>[
-      _BarData('JAN', 86),
-      _BarData('FEB', 140),
-      _BarData('MAR', 182, selected: true),
-      _BarData('APR', 118),
-      _BarData('MAY', 150),
-      _BarData('JUN', 96),
-      _BarData('JUL', 130),
-    ];
+    _scrollToRecentDays();
+
+    return _DashboardPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Monthly Posting Overview',
+            style: TextStyle(
+              color: const Color(0xFF0C1116),
+              fontSize: ResponsiveUtils.sp(5).clamp(17, 20),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          SizedBox(height: ResponsiveUtils.hp(1.6).clamp(10, 16).toDouble()),
+          if (widget.items.isEmpty)
+            const _EmptyPanelMessage(message: 'No posting activity this month')
+          else
+            SizedBox(
+              height: ResponsiveUtils.hp(28).clamp(205, 245),
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final item in widget.items) ...[
+                      SizedBox(
+                        width: 44,
+                        child: _DayBar(
+                          item: item,
+                          maxTotal: _maxPostingTotal(widget.items),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  int _maxPostingTotal(List<MonthlyPostingOverviewItem> values) {
+    var max = 0;
+    for (final value in values) {
+      if (value.total > max) max = value.total;
+    }
+    return max == 0 ? 1 : max;
+  }
+}
+
+class _DayBar extends StatelessWidget {
+  final MonthlyPostingOverviewItem item;
+  final int maxTotal;
+
+  const _DayBar({required this.item, required this.maxTotal});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const labelHeight = 18.0;
+        const labelGap = 10.0;
+        const valueHeight = 24.0;
+        const valueGap = 8.0;
+        final maxBarHeight =
+            constraints.maxHeight -
+            labelHeight -
+            labelGap -
+            valueHeight -
+            valueGap;
+        final barHeight = item.total <= 0
+            ? 8.0
+            : (item.total / maxTotal * maxBarHeight).clamp(18.0, maxBarHeight);
+
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            SizedBox(
+              height: valueHeight,
+              child: Center(
+                child: Text(
+                  item.total.toString(),
+                  style: const TextStyle(
+                    color: Color(0xFF5E6673),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(height: valueGap),
+            Tooltip(
+              message: 'Instagram ${item.instagram}, Facebook ${item.facebook}',
+              child: Container(
+                height: barHeight,
+                decoration: BoxDecoration(
+                  color: item.total > 0
+                      ? const Color(0xFFA84A0D)
+                      : const Color(0xFFE9EEF2),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: labelGap),
+            SizedBox(
+              height: labelHeight,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  item.label,
+                  style: const TextStyle(
+                    color: Color(0xFF202329),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _PostingGapMonitor extends StatelessWidget {
+  final List<PostingGapItem> gaps;
+
+  const _PostingGapMonitor({required this.gaps});
+
+  @override
+  Widget build(BuildContext context) {
+    return _DashboardPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Posting Gap Monitor',
+            style: TextStyle(
+              color: const Color(0xFF0C1116),
+              fontSize: ResponsiveUtils.sp(5).clamp(17, 20),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          SizedBox(height: ResponsiveUtils.hp(1.6).clamp(10, 16).toDouble()),
+          if (gaps.isEmpty)
+            const _EmptyPanelMessage(message: 'No posting gaps found')
+          else
+            Column(
+              children: gaps.take(4).map((gap) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _PostingGapTile(gap: gap),
+                );
+              }).toList(),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PostingGapTile extends StatelessWidget {
+  final PostingGapItem gap;
+
+  const _PostingGapTile({required this.gap});
+
+  @override
+  Widget build(BuildContext context) {
+    final toneColor = _toneColor(gap.severity.tone);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE3E8EF)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            height: 42,
+            width: 42,
+            decoration: BoxDecoration(
+              color: toneColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.schedule_rounded, color: toneColor, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  gap.clientName.isEmpty ? 'Unknown client' : gap.clientName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF111827),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  gap.severity.detail.isNotEmpty
+                      ? gap.severity.detail
+                      : '${gap.gapDays} day gap',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF6E625E),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          _StatusPill(
+            label: gap.severity.label.isEmpty
+                ? gap.severity.tone
+                : gap.severity.label,
+            color: toneColor,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _toneColor(String tone) {
+    switch (tone.toLowerCase()) {
+      case 'healthy':
+        return const Color(0xFF127A36);
+      case 'warning':
+        return const Color(0xFFC47A08);
+      case 'critical':
+        return const Color(0xFFD30000);
+      default:
+        return const Color(0xFF58677B);
+    }
+  }
+}
+
+class _RecentPostsHeader extends StatelessWidget {
+  const _RecentPostsHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'Recent Posts',
+      style: TextStyle(
+        color: const Color(0xFF0C1116),
+        fontSize: ResponsiveUtils.sp(5.2).clamp(18, 21),
+        fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+}
+
+class _RecentPostsList extends StatelessWidget {
+  final List<DashboardRecentPost> posts;
+
+  const _RecentPostsList({required this.posts});
+
+  @override
+  Widget build(BuildContext context) {
+    if (posts.isEmpty) {
+      return const _DashboardPanel(
+        child: _EmptyPanelMessage(message: 'No recent posts found'),
+      );
+    }
+
+    return Column(
+      children: posts
+          .take(5)
+          .map(
+            (post) => Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: _RecentPostTile(post: post),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _RecentPostTile extends StatelessWidget {
+  final DashboardRecentPost post;
+
+  const _RecentPostTile({required this.post});
+
+  @override
+  Widget build(BuildContext context) {
+    final thumbSize = ResponsiveUtils.wp(13).clamp(46, 58).toDouble();
+    final compact = MediaQuery.sizeOf(context).width < 360;
+    final platformColor = _platformColor(post.platform);
 
     return Container(
+      padding: EdgeInsets.all(ResponsiveUtils.wp(4).clamp(14, 18).toDouble()),
+      decoration: BoxDecoration(
+        color: Appcolors.kwhitecolor.withValues(alpha: 0.96),
+        borderRadius: BorderRadiusStyles.kradius15(),
+      ),
+      child: Row(
+        children: [
+          Container(
+            height: thumbSize,
+            width: thumbSize,
+            decoration: BoxDecoration(
+              color: platformColor,
+              borderRadius: BorderRadiusStyles.kradius10(),
+            ),
+            child: Icon(
+              _platformIcon(post.platform),
+              color: Appcolors.kwhitecolor,
+              size: thumbSize * 0.52,
+            ),
+          ),
+          SizedBox(width: ResponsiveUtils.wp(3.4).clamp(10, 18)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  post.title.isEmpty ? 'Untitled post' : post.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: const Color(0xFF1A2028),
+                    fontSize: ResponsiveUtils.sp(4.4).clamp(15, 18),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                SizedBox(height: ResponsiveUtils.hp(0.4)),
+                Text(
+                  _recentPostMeta(post),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: const Color(0xFF6E625E),
+                    fontSize: ResponsiveUtils.sp(4.2).clamp(14, 18),
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: compact ? 6 : 10),
+          _StatusPill(label: post.status, color: const Color(0xFF087D80)),
+        ],
+      ),
+    );
+  }
+
+  String _recentPostMeta(DashboardRecentPost post) {
+    final client = post.clientName.isEmpty ? 'Unknown client' : post.clientName;
+    final date = _formatPostDate(post.scheduledFor);
+    return '$client - $date';
+  }
+
+  String _formatPostDate(DateTime? value) {
+    if (value == null) return 'No date';
+    final local = value.toLocal();
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final period = local.hour >= 12 ? 'PM' : 'AM';
+    return '${local.day}/${local.month}/${local.year}, $hour:$minute $period';
+  }
+
+  Color _platformColor(String platform) {
+    final normalized = platform.toLowerCase();
+    if (normalized.contains('instagram')) return const Color(0xFFD5298D);
+    if (normalized.contains('facebook')) return const Color(0xFF1877F2);
+    return const Color(0xFF3F5D62);
+  }
+
+  IconData _platformIcon(String platform) {
+    final normalized = platform.toLowerCase();
+    if (normalized.contains('facebook')) return Icons.facebook_rounded;
+    if (normalized.contains('instagram')) return Icons.camera_alt_rounded;
+    return Icons.public_rounded;
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _StatusPill({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final displayLabel = label.trim().isEmpty ? 'unknown' : label.trim();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Text(
+        displayLabel,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _DashboardPanel extends StatelessWidget {
+  final Widget child;
+
+  const _DashboardPanel({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
       padding: EdgeInsets.fromLTRB(
         ResponsiveUtils.wp(5.2),
         ResponsiveUtils.hp(2.4),
@@ -270,297 +790,93 @@ class _PostingOverviewCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      child: child,
+    );
+  }
+}
+
+class _EmptyPanelMessage extends StatelessWidget {
+  final String message;
+
+  const _EmptyPanelMessage({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Center(
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Color(0xFF5E6673),
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashboardLoading extends StatelessWidget {
+  const _DashboardLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.55,
+      child: const Center(
+        child: CircularProgressIndicator(color: Appcolors.kprimarycolor),
+      ),
+    );
+  }
+}
+
+class _DashboardError extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _DashboardError({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.55,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: Text(
-                  'Monthly Posting Overview',
-                  style: TextStyle(
-                    color: const Color(0xFF0C1116),
-                    fontSize: ResponsiveUtils.sp(5).clamp(17, 20),
-                    fontWeight: FontWeight.w800,
-                  ),
+              const Icon(
+                Icons.error_outline_rounded,
+                color: Appcolors.kredcolor,
+                size: 36,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Color(0xFF202833),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              IconButton(
-                onPressed: () {},
-                icon: const Icon(Icons.more_vert_rounded),
-                color: Appcolors.ktextdark,
-                tooltip: 'More',
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: onRetry,
+                style: FilledButton.styleFrom(
+                  backgroundColor: Appcolors.kprimarycolor,
+                  foregroundColor: Appcolors.kwhitecolor,
+                ),
+                child: const Text('Retry'),
               ),
             ],
           ),
-          SizedBox(height: ResponsiveUtils.hp(1.6).clamp(10, 16).toDouble()),
-          SizedBox(
-            height: ResponsiveUtils.hp(28).clamp(205, 245),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final bar in bars) ...[
-                  Expanded(child: _MonthBar(data: bar)),
-                  if (bar != bars.last)
-                    SizedBox(width: ResponsiveUtils.wp(2).clamp(6, 10)),
-                ],
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
-}
-
-class _MonthBar extends StatelessWidget {
-  final _BarData data;
-
-  const _MonthBar({required this.data});
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const labelHeight = 18.0;
-        const labelGap = 10.0;
-        final tooltipHeight = data.selected ? 28.0 : 0.0;
-        final tooltipGap = data.selected ? 8.0 : 0.0;
-        final reservedHeight =
-            labelHeight + labelGap + tooltipHeight + tooltipGap;
-        final maxBarHeight = (constraints.maxHeight - reservedHeight).clamp(
-          88.0,
-          double.infinity,
-        );
-        final scaledHeight = (data.height / 182) * maxBarHeight;
-
-        return Column(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            if (data.selected) ...[
-              SizedBox(
-                height: tooltipHeight,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF151A1F),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8),
-                    child: Center(
-                      child: Text(
-                        '124',
-                        style: TextStyle(
-                          color: Appcolors.kwhitecolor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(height: tooltipGap),
-            ],
-            Container(
-              height: scaledHeight.clamp(48, maxBarHeight),
-              decoration: BoxDecoration(
-                color: data.selected
-                    ? const Color(0xFFA84A0D)
-                    : const Color(0xFFE9EEF2),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(8),
-                ),
-              ),
-            ),
-            const SizedBox(height: labelGap),
-            SizedBox(
-              height: labelHeight,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  data.label,
-                  style: TextStyle(
-                    color: data.selected
-                        ? const Color(0xFFA84A0D)
-                        : const Color(0xFF202329),
-                    fontSize: ResponsiveUtils.sp(3.2).clamp(10, 12),
-                    fontWeight: data.selected
-                        ? FontWeight.w800
-                        : FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _RecentPostsHeader extends StatelessWidget {
-  const _RecentPostsHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            'Recent Posts',
-            style: TextStyle(
-              color: const Color(0xFF0C1116),
-              fontSize: ResponsiveUtils.sp(5.2).clamp(18, 21),
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-        TextButton(
-          onPressed: () {},
-          child: Text(
-            'View All',
-            style: TextStyle(
-              color: const Color(0xFFA84A0D),
-              fontSize: ResponsiveUtils.sp(4.4).clamp(15, 18),
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _RecentPostsList extends StatelessWidget {
-  const _RecentPostsList();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Column(
-      children: [
-        _RecentPostTile(
-          title: 'New Summer Collec ...',
-          date: 'Today, 10:30 AM',
-          icon: Icons.auto_awesome_rounded,
-          thumbnailColor: Color(0xFF17124B),
-        ),
-        SizedBox(height: 14),
-        _RecentPostTile(
-          title: 'Weekly Team Updat...',
-          date: 'Yesterday, 4:15 PM',
-          icon: Icons.campaign_rounded,
-          thumbnailColor: Color(0xFF8F806D),
-        ),
-        SizedBox(height: 14),
-        _RecentPostTile(
-          title: 'Growth Analytics 20...',
-          date: '22 Mar, 11:00 AM',
-          icon: Icons.trending_up_rounded,
-          thumbnailColor: Color(0xFF3F5D62),
-        ),
-      ],
-    );
-  }
-}
-
-class _RecentPostTile extends StatelessWidget {
-  final String title;
-  final String date;
-  final IconData icon;
-  final Color thumbnailColor;
-
-  const _RecentPostTile({
-    required this.title,
-    required this.date,
-    required this.icon,
-    required this.thumbnailColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final thumbSize = ResponsiveUtils.wp(13).clamp(46, 58).toDouble();
-    final compact = MediaQuery.sizeOf(context).width < 360;
-
-    return Container(
-      padding: EdgeInsets.all(ResponsiveUtils.wp(4).clamp(14, 18).toDouble()),
-      decoration: BoxDecoration(
-        color: Appcolors.kwhitecolor.withValues(alpha: 0.96),
-        borderRadius: BorderRadiusStyles.kradius15(),
-      ),
-      child: Row(
-        children: [
-          Container(
-            height: thumbSize,
-            width: thumbSize,
-            decoration: BoxDecoration(
-              color: thumbnailColor,
-              borderRadius: BorderRadiusStyles.kradius10(),
-            ),
-            child: Icon(
-              icon,
-              color: Appcolors.kwhitecolor,
-              size: thumbSize * 0.52,
-            ),
-          ),
-          SizedBox(width: ResponsiveUtils.wp(3.4).clamp(10, 18)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: const Color(0xFF1A2028),
-                    fontSize: ResponsiveUtils.sp(4.4).clamp(15, 18),
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                SizedBox(height: ResponsiveUtils.hp(0.4)),
-                Text(
-                  date,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: const Color(0xFF6E625E),
-                    fontSize: ResponsiveUtils.sp(4.2).clamp(14, 18),
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(width: compact ? 6 : 10),
-          Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: compact ? 9 : 14,
-              vertical: compact ? 7 : 8,
-            ),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE4F4F2),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Text(
-              'Published',
-              style: TextStyle(
-                color: const Color(0xFF087D80),
-                fontSize: compact ? 10 : 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BarData {
-  final String label;
-  final double height;
-  final bool selected;
-
-  const _BarData(this.label, this.height, {this.selected = false});
 }

@@ -6,6 +6,8 @@ import 'package:crisant_connect/features/authentication/blocs/logout_bloc/logout
 import 'package:crisant_connect/features/authentication/blocs/refresh_token_bloc/refresh_token_bloc.dart';
 import 'package:crisant_connect/features/authentication/blocs/send_otp_bloc/send_otp_bloc.dart';
 import 'package:crisant_connect/features/authentication/blocs/verify_otp_bloc/verify_otp_bloc.dart';
+import 'package:crisant_connect/features/dashboard/blocs/dashboard_bloc/dashboard_bloc.dart';
+import 'package:crisant_connect/features/dashboard/dashboard_repo.dart';
 import 'package:crisant_connect/features/gallery/blocs/media_library_bloc/media_library_bloc.dart';
 import 'package:crisant_connect/features/notifications/blocs/notifications_bloc/notifications_bloc.dart';
 import 'package:crisant_connect/features/notifications/notifications_repo.dart';
@@ -39,6 +41,7 @@ class MyApp extends StatelessWidget {
           dispose: (apprepo) => apprepo.dispose(),
         ),
         RepositoryProvider(create: (_) => PostRepo(dio)),
+        RepositoryProvider(create: (_) => DashboardRepo(dio)),
         RepositoryProvider(create: (_) => ProfileRepo(dio)),
         RepositoryProvider(create: (_) => NotificationsRepo(dio)),
       ],
@@ -61,6 +64,10 @@ class MyApp extends StatelessWidget {
           BlocProvider(
             create: (context) =>
                 ClientsBloc(postRepo: context.read<PostRepo>()),
+          ),
+          BlocProvider(
+            create: (context) =>
+                DashboardBloc(dashboardRepo: context.read<DashboardRepo>()),
           ),
           BlocProvider(
             create: (context) =>

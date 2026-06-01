@@ -1348,6 +1348,30 @@ class _GalleryPickerSheet extends StatefulWidget {
 
 class _GalleryPickerSheetState extends State<_GalleryPickerSheet> {
   late final Set<int> _selectedIds = {...widget.initiallySelectedIds};
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_handleScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.extentAfter > 360) return;
+    final state = context.read<MediaLibraryBloc>().state;
+    if (state is MediaLibrarySuccess && state.hasMore && !state.isLoadingMore) {
+      context.read<MediaLibraryBloc>().add(FetchMoreMediaLibraryRequested());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1401,9 +1425,8 @@ class _GalleryPickerSheetState extends State<_GalleryPickerSheet> {
             );
           }
 
-          final media = state is MediaLibrarySuccess
-              ? state.media
-              : const <MediaAsset>[];
+          final successState = state is MediaLibrarySuccess ? state : null;
+          final media = successState?.media ?? const <MediaAsset>[];
           if (media.isEmpty) {
             return const SizedBox(
               height: 220,
@@ -1429,6 +1452,7 @@ class _GalleryPickerSheetState extends State<_GalleryPickerSheet> {
             children: [
               Flexible(
                 child: GridView.builder(
+                  controller: _scrollController,
                   shrinkWrap: true,
                   physics: const BouncingScrollPhysics(),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -1437,8 +1461,17 @@ class _GalleryPickerSheetState extends State<_GalleryPickerSheet> {
                     crossAxisSpacing: 12,
                     childAspectRatio: 0.92,
                   ),
-                  itemCount: media.length,
+                  itemCount:
+                      media.length +
+                      ((successState?.isLoadingMore ?? false) ? 1 : 0),
                   itemBuilder: (context, index) {
+                    if (index >= media.length) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          color: Appcolors.kprimarycolor,
+                        ),
+                      );
+                    }
                     final asset = media[index];
                     final selected = _selectedIds.contains(asset.id);
                     return _GalleryPickerTile(

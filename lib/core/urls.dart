@@ -8,6 +8,7 @@ class Endpoints {
   static const logout = 'auth/logout';
   static const refreshtoken = refreshToken;
   static const me = 'me';
+  static const dashboard = 'dashboard';
   static const clients = 'clients';
   static const uploads = 'uploads';
   static const posts = 'posts';

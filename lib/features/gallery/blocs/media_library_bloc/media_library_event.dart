@@ -4,3 +4,5 @@ part of 'media_library_bloc.dart';
 sealed class MediaLibraryEvent {}
 
 final class FetchMediaLibraryRequested extends MediaLibraryEvent {}
+
+final class FetchMoreMediaLibraryRequested extends MediaLibraryEvent {}

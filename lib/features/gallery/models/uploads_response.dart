@@ -1,10 +1,36 @@
 class UploadsResponse {
   final List<MediaAsset> media;
+  final int page;
+  final int limit;
+  final int total;
+  final int totalPages;
 
-  const UploadsResponse({required this.media});
+  const UploadsResponse({
+    required this.media,
+    required this.page,
+    required this.limit,
+    required this.total,
+    required this.totalPages,
+  });
 
   factory UploadsResponse.fromJson(Map<String, dynamic> json) {
     final rawMedia = json['media'];
+    final rawPagination = json['pagination'];
+    final pagination = rawPagination is Map<String, dynamic>
+        ? rawPagination
+        : const <String, dynamic>{};
+    final page = _readInt(
+      json['page'] ?? json['currentPage'] ?? pagination['page'],
+      fallback: 1,
+    );
+    final limit = _readInt(json['limit'] ?? pagination['limit'], fallback: 10);
+    final total = _readInt(
+      json['total'] ?? json['totalItems'] ?? pagination['total'],
+    );
+    final totalPages = _readInt(
+      json['totalPages'] ?? json['lastPage'] ?? pagination['totalPages'],
+    );
+
     return UploadsResponse(
       media: rawMedia is List
           ? rawMedia
@@ -12,7 +38,22 @@ class UploadsResponse {
                 .map(MediaAsset.fromJson)
                 .toList()
           : const [],
+      page: page,
+      limit: limit,
+      total: total,
+      totalPages: totalPages,
     );
+  }
+
+  bool get hasMore {
+    if (totalPages > 0) return page < totalPages;
+    if (total > 0) return page * limit < total;
+    return media.length >= limit;
+  }
+
+  static int _readInt(dynamic value, {int fallback = 0}) {
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '') ?? fallback;
   }
 }
 

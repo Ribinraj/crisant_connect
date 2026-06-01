@@ -68,11 +68,17 @@ class PostRepo {
     }
   }
 
-  Future<ApiResponse<UploadsResponse>> getUploads() async {
+  Future<ApiResponse<UploadsResponse>> getUploads({
+    int page = 1,
+    int limit = 10,
+  }) async {
     try {
-      debugPrint('[PostRepo] GET ${Endpoints.baseUrl}${Endpoints.uploads}');
+      debugPrint(
+        '[PostRepo] GET ${Endpoints.baseUrl}${Endpoints.uploads}?page=$page&limit=$limit',
+      );
       final response = await dio.get<Map<String, dynamic>>(
         Endpoints.uploads,
+        queryParameters: {'page': page, 'limit': limit},
         options: Options(extra: {DioClient.skipUnauthorizedRedirectKey: true}),
       );
       final responseData = response.data ?? {};

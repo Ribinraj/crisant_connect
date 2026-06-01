@@ -18,13 +18,32 @@ class ScreenGallery extends StatefulWidget {
 
 class _ScreenGalleryState extends State<ScreenGallery> {
   int _selectedFilter = 0;
+  final ScrollController _scrollController = ScrollController();
 
   static const _filters = ['All Media', 'Images', 'Videos'];
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_handleScroll);
     context.read<MediaLibraryBloc>().add(FetchMediaLibraryRequested());
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.extentAfter > 500) return;
+    final state = context.read<MediaLibraryBloc>().state;
+    if (state is MediaLibrarySuccess && state.hasMore && !state.isLoadingMore) {
+      context.read<MediaLibraryBloc>().add(FetchMoreMediaLibraryRequested());
+    }
   }
 
   @override
@@ -36,6 +55,7 @@ class _ScreenGalleryState extends State<ScreenGallery> {
       child: SafeArea(
         bottom: false,
         child: CustomScrollView(
+          controller: _scrollController,
           physics: const BouncingScrollPhysics(),
           slivers: [
             const SliverToBoxAdapter(child: CrisantAppBar()),
@@ -76,7 +96,11 @@ class _ScreenGalleryState extends State<ScreenGallery> {
                       final media = state is MediaLibrarySuccess
                           ? state.media
                           : const <MediaAsset>[];
-                      return _AssetGrid(assets: _filteredAssets(media));
+                      return _AssetGrid(
+                        assets: _filteredAssets(media),
+                        isLoadingMore:
+                            state is MediaLibrarySuccess && state.isLoadingMore,
+                      );
                     },
                   ),
                 ]),
@@ -183,12 +207,13 @@ class _FilterRow extends StatelessWidget {
 
 class _AssetGrid extends StatelessWidget {
   final List<MediaAsset> assets;
+  final bool isLoadingMore;
 
-  const _AssetGrid({required this.assets});
+  const _AssetGrid({required this.assets, required this.isLoadingMore});
 
   @override
   Widget build(BuildContext context) {
-    if (assets.isEmpty) {
+    if (assets.isEmpty && !isLoadingMore) {
       return const _EmptyAssets();
     }
 
@@ -201,18 +226,30 @@ class _AssetGrid extends StatelessWidget {
             (constraints.maxWidth - spacing * (columns - 1)) / columns;
         final tileHeight = tileWidth * 1.32;
 
-        return Wrap(
-          spacing: spacing,
-          runSpacing: ResponsiveUtils.hp(2.6).clamp(18, 26).toDouble(),
-          children: assets
-              .map(
-                (asset) => SizedBox(
-                  width: tileWidth,
-                  height: tileHeight,
-                  child: _AssetTile(asset: asset),
+        return Column(
+          children: [
+            Wrap(
+              spacing: spacing,
+              runSpacing: ResponsiveUtils.hp(2.6).clamp(18, 26).toDouble(),
+              children: assets
+                  .map(
+                    (asset) => SizedBox(
+                      width: tileWidth,
+                      height: tileHeight,
+                      child: _AssetTile(asset: asset),
+                    ),
+                  )
+                  .toList(),
+            ),
+            if (isLoadingMore) ...[
+              SizedBox(height: ResponsiveUtils.hp(2.8)),
+              const Center(
+                child: CircularProgressIndicator(
+                  color: Appcolors.kprimarycolor,
                 ),
-              )
-              .toList(),
+              ),
+            ],
+          ],
         );
       },
     );
