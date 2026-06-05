@@ -76,33 +76,41 @@ class ScreenMore extends StatelessWidget {
           opacity: 0.35,
           child: SafeArea(
             child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                ResponsiveUtils.wp(6).clamp(20, 28).toDouble(),
-                ResponsiveUtils.hp(3).clamp(18, 30).toDouble(),
-                ResponsiveUtils.wp(6).clamp(20, 28).toDouble(),
-                ResponsiveUtils.hp(12).clamp(96, 120).toDouble(),
+              padding: ResponsiveUtils.pagePadding(
+                context,
+                mobileHorizontalPercent: 6,
+                top: ResponsiveUtils.hp(3).clamp(18, 30).toDouble(),
+                bottom: ResponsiveUtils.bottomScrollPadding(context),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'More',
-                    style: TextStyle(
-                      color: Appcolors.ktextdark,
-                      fontSize: ResponsiveUtils.sp(7).clamp(26, 30).toDouble(),
-                      fontWeight: FontWeight.w800,
+              child: ResponsiveUtils.constrainWidth(
+                context: context,
+                maxWidth: ResponsiveUtils.isDesktop(context)
+                    ? ResponsiveUtils.desktopReadableMaxWidth
+                    : ResponsiveUtils.narrowPageMaxWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'More',
+                      style: TextStyle(
+                        color: Appcolors.ktextdark,
+                        fontSize: ResponsiveUtils.isDesktop(context)
+                            ? 32.0
+                            : ResponsiveUtils.sp(7).clamp(26, 30).toDouble(),
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 22),
-                  _MoreActionTile(
-                    icon: Icons.logout_rounded,
-                    title: 'Logout',
-                    subtitle: 'Sign out from this device',
-                    iconColor: Appcolors.kredcolor,
-                    isLoading: isLoading,
-                    onTap: isLoading ? null : () => _confirmLogout(context),
-                  ),
-                ],
+                    const SizedBox(height: 22),
+                    _MoreActionTile(
+                      icon: Icons.logout_rounded,
+                      title: 'Logout',
+                      subtitle: 'Sign out from this device',
+                      iconColor: Appcolors.kredcolor,
+                      isLoading: isLoading,
+                      onTap: isLoading ? null : () => _confirmLogout(context),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -131,6 +139,8 @@ class _MoreActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return Material(
       color: Appcolors.kwhitecolor.withValues(alpha: 0.92),
       borderRadius: BorderRadius.circular(14),
@@ -140,7 +150,10 @@ class _MoreActionTile extends StatelessWidget {
         child: Opacity(
           opacity: onTap == null ? 0.72 : 1,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: EdgeInsets.symmetric(
+              horizontal: isDesktop ? 22 : 16,
+              vertical: isDesktop ? 18 : 14,
+            ),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
@@ -150,8 +163,8 @@ class _MoreActionTile extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  height: 44,
-                  width: 44,
+                  height: isDesktop ? 56 : 44,
+                  width: isDesktop ? 56 : 44,
                   decoration: BoxDecoration(
                     color: iconColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
@@ -164,36 +177,37 @@ class _MoreActionTile extends StatelessWidget {
                             color: Appcolors.kredcolor,
                           ),
                         )
-                      : Icon(icon, color: iconColor),
+                      : Icon(icon, color: iconColor, size: isDesktop ? 30 : 24),
                 ),
-                const SizedBox(width: 14),
+                SizedBox(width: isDesktop ? 18 : 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Appcolors.ktextdark,
-                          fontSize: 16,
+                          fontSize: isDesktop ? 19 : 16,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 3),
                       Text(
                         isLoading ? 'Signing out...' : subtitle,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Appcolors.ktextlight,
-                          fontSize: 13,
+                          fontSize: isDesktop ? 15 : 13,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const Icon(
+                Icon(
                   Icons.chevron_right_rounded,
                   color: Appcolors.ktextlight,
+                  size: isDesktop ? 30 : 24,
                 ),
               ],
             ),

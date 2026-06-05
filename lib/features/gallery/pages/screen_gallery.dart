@@ -5,6 +5,7 @@ import 'package:crisant_connect/features/gallery/blocs/media_library_bloc/media_
 import 'package:crisant_connect/features/gallery/models/uploads_response.dart';
 import 'package:crisant_connect/widgets/app_background.dart';
 import 'package:crisant_connect/widgets/crisant_app_bar.dart';
+import 'package:crisant_connect/widgets/video_thumbnail_preview.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:video_player/video_player.dart';
@@ -60,48 +61,57 @@ class _ScreenGalleryState extends State<ScreenGallery> {
           slivers: [
             const SliverToBoxAdapter(child: CrisantAppBar()),
             SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                ResponsiveUtils.wp(6.2),
-                ResponsiveUtils.hp(2.8),
-                ResponsiveUtils.wp(6.2),
-                ResponsiveUtils.hp(16),
+              padding: ResponsiveUtils.pagePadding(
+                context,
+                mobileHorizontalPercent: 6.2,
+                top: ResponsiveUtils.hp(2.8),
+                bottom: ResponsiveUtils.bottomScrollPadding(context),
               ),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  const _GalleryIntro(),
-                  SizedBox(height: ResponsiveUtils.hp(2.6)),
-                  _FilterRow(
-                    filters: _filters,
-                    selectedIndex: _selectedFilter,
-                    onSelected: (index) =>
-                        setState(() => _selectedFilter = index),
-                  ),
-                  SizedBox(height: ResponsiveUtils.hp(3.1)),
-                  BlocBuilder<MediaLibraryBloc, MediaLibraryState>(
-                    builder: (context, state) {
-                      if (state is MediaLibraryLoading ||
-                          state is MediaLibraryInitial) {
-                        return const _AssetsLoading();
-                      }
+                  ResponsiveUtils.constrainWidth(
+                    context: context,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const _GalleryIntro(),
+                        SizedBox(height: ResponsiveUtils.hp(2.6)),
+                        _FilterRow(
+                          filters: _filters,
+                          selectedIndex: _selectedFilter,
+                          onSelected: (index) =>
+                              setState(() => _selectedFilter = index),
+                        ),
+                        SizedBox(height: ResponsiveUtils.hp(3.1)),
+                        BlocBuilder<MediaLibraryBloc, MediaLibraryState>(
+                          builder: (context, state) {
+                            if (state is MediaLibraryLoading ||
+                                state is MediaLibraryInitial) {
+                              return const _AssetsLoading();
+                            }
 
-                      if (state is MediaLibraryFailure) {
-                        return _AssetsError(
-                          message: state.message,
-                          onRetry: () => context.read<MediaLibraryBloc>().add(
-                            FetchMediaLibraryRequested(),
-                          ),
-                        );
-                      }
+                            if (state is MediaLibraryFailure) {
+                              return _AssetsError(
+                                message: state.message,
+                                onRetry: () => context
+                                    .read<MediaLibraryBloc>()
+                                    .add(FetchMediaLibraryRequested()),
+                              );
+                            }
 
-                      final media = state is MediaLibrarySuccess
-                          ? state.media
-                          : const <MediaAsset>[];
-                      return _AssetGrid(
-                        assets: _filteredAssets(media),
-                        isLoadingMore:
-                            state is MediaLibrarySuccess && state.isLoadingMore,
-                      );
-                    },
+                            final media = state is MediaLibrarySuccess
+                                ? state.media
+                                : const <MediaAsset>[];
+                            return _AssetGrid(
+                              assets: _filteredAssets(media),
+                              isLoadingMore:
+                                  state is MediaLibrarySuccess &&
+                                  state.isLoadingMore,
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ]),
               ),
@@ -128,6 +138,8 @@ class _GalleryIntro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -135,7 +147,7 @@ class _GalleryIntro extends StatelessWidget {
           'Media Library',
           style: TextStyle(
             color: const Color(0xFF111827),
-            fontSize: ResponsiveUtils.sp(8.3).clamp(30, 38),
+            fontSize: isDesktop ? 42 : ResponsiveUtils.sp(8.3).clamp(30, 38),
             fontWeight: FontWeight.w900,
             height: 1.04,
           ),
@@ -145,7 +157,7 @@ class _GalleryIntro extends StatelessWidget {
           'Browse creative media',
           style: TextStyle(
             color: Appcolors.ktextdark,
-            fontSize: ResponsiveUtils.sp(4.6).clamp(17, 21),
+            fontSize: isDesktop ? 23 : ResponsiveUtils.sp(4.6).clamp(17, 21),
             fontWeight: FontWeight.w500,
             height: 1.28,
           ),
@@ -168,6 +180,8 @@ class _FilterRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
@@ -186,7 +200,9 @@ class _FilterRow extends StatelessWidget {
               selectedColor: const Color(0xFFB34708),
               labelStyle: TextStyle(
                 color: selected ? Appcolors.kwhitecolor : Appcolors.ktextdark,
-                fontSize: ResponsiveUtils.sp(3.8).clamp(14, 17),
+                fontSize: isDesktop
+                    ? 18
+                    : ResponsiveUtils.sp(3.8).clamp(14, 17),
                 fontWeight: FontWeight.w800,
               ),
               side: BorderSide.none,
@@ -194,8 +210,10 @@ class _FilterRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(28),
               ),
               padding: EdgeInsets.symmetric(
-                horizontal: ResponsiveUtils.wp(3.4).clamp(13, 18),
-                vertical: 12,
+                horizontal: isDesktop
+                    ? 22
+                    : ResponsiveUtils.wp(3.4).clamp(13, 18),
+                vertical: isDesktop ? 14 : 12,
               ),
             ),
           );
@@ -217,14 +235,23 @@ class _AssetGrid extends StatelessWidget {
       return const _EmptyAssets();
     }
 
-    final spacing = ResponsiveUtils.wp(4.4).clamp(14, 22).toDouble();
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+    final spacing = isDesktop
+        ? 20.0
+        : ResponsiveUtils.wp(4.4).clamp(14, 22).toDouble();
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth > 680 ? 3 : 2;
+        final columns = isDesktop
+            ? (constraints.maxWidth >= 1280 ? 5 : 4)
+            : ResponsiveUtils.gridColumns(
+                constraints.maxWidth,
+                tablet: constraints.maxWidth > 760 ? 3 : 2,
+                desktop: 4,
+              );
         final tileWidth =
             (constraints.maxWidth - spacing * (columns - 1)) / columns;
-        final tileHeight = tileWidth * 1.32;
+        final tileHeight = tileWidth * (isDesktop ? 1.18 : 1.32);
 
         return Column(
           children: [
@@ -274,6 +301,8 @@ class _AssetTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return GestureDetector(
       onTap: asset.isVideo ? () => _openVideoPlayer(context) : null,
       child: ClipRRect(
@@ -287,6 +316,12 @@ class _AssetTile extends StatelessWidget {
                 fit: BoxFit.cover,
                 webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
                 errorBuilder: (_, _, _) => _AssetFallback(asset: asset),
+              )
+            else if (asset.isVideo && asset.url.isNotEmpty)
+              VideoThumbnailPreview(
+                source: asset.resolvedUrl(Endpoints.mediaBaseUrl),
+                fallback: _AssetFallback(asset: asset),
+                playBadgeSize: 54,
               )
             else
               _AssetFallback(asset: asset),
@@ -308,8 +343,8 @@ class _AssetTile extends StatelessWidget {
                 top: 16,
                 right: 14,
                 child: Container(
-                  height: 44,
-                  width: 44,
+                  height: isDesktop ? 52 : 44,
+                  width: isDesktop ? 52 : 44,
                   decoration: BoxDecoration(
                     color: Appcolors.kwhitecolor.withValues(alpha: 0.9),
                     shape: BoxShape.circle,
@@ -323,7 +358,7 @@ class _AssetTile extends StatelessWidget {
                   ),
                   child: Icon(
                     Icons.image_rounded,
-                    size: 24,
+                    size: isDesktop ? 30 : 24,
                     color: const Color(0xFFB34708),
                   ),
                 ),
@@ -340,9 +375,9 @@ class _AssetTile extends StatelessWidget {
                     asset.name.isEmpty ? asset.storedName : asset.name,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Appcolors.kwhitecolor,
-                      fontSize: 13,
+                      fontSize: isDesktop ? 16 : 13,
                       fontWeight: FontWeight.w800,
                       height: 1.18,
                     ),
@@ -354,7 +389,7 @@ class _AssetTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: Appcolors.kwhitecolor.withValues(alpha: 0.86),
-                      fontSize: 11,
+                      fontSize: isDesktop ? 13 : 11,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -379,6 +414,7 @@ class _VideoPlayerSheet extends StatefulWidget {
 
 class _VideoPlayerSheetState extends State<_VideoPlayerSheet> {
   late final VideoPlayerController _controller;
+  final ScrollController _scrollController = ScrollController();
   bool _hasError = false;
 
   @override
@@ -409,12 +445,15 @@ class _VideoPlayerSheetState extends State<_VideoPlayerSheet> {
   void dispose() {
     _controller.removeListener(_onVideoChanged);
     _controller.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final isReady = _controller.value.isInitialized;
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+    final showMacControls = ResponsiveUtils.isMacBook(context);
 
     return SafeArea(
       child: Align(
@@ -422,8 +461,16 @@ class _VideoPlayerSheetState extends State<_VideoPlayerSheet> {
         child: FractionallySizedBox(
           heightFactor: 0.9,
           child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+            width: isDesktop ? 900 : double.infinity,
+            constraints: BoxConstraints(
+              maxWidth: isDesktop ? 900 : double.infinity,
+            ),
+            padding: EdgeInsets.fromLTRB(
+              isDesktop ? 24 : 16,
+              isDesktop ? 16 : 12,
+              isDesktop ? 24 : 16,
+              isDesktop ? 24 : 18,
+            ),
             decoration: const BoxDecoration(
               color: Appcolors.kwhitecolor,
               borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -450,110 +497,127 @@ class _VideoPlayerSheetState extends State<_VideoPlayerSheet> {
                             : widget.asset.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF1A2028),
-                          fontSize: 16,
+                        style: TextStyle(
+                          color: const Color(0xFF1A2028),
+                          fontSize: isDesktop ? 20 : 16,
                           fontWeight: FontWeight.w900,
                         ),
                       ),
                     ),
                     IconButton(
                       onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close_rounded),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: isDesktop ? 30 : 24,
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
                 Expanded(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: Column(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: Container(
-                            width: double.infinity,
-                            color: const Color(0xFF111827),
-                            child: AspectRatio(
-                              aspectRatio: isReady
-                                  ? _controller.value.aspectRatio
-                                  : 16 / 9,
-                              child: _hasError
-                                  ? const Center(
-                                      child: Icon(
-                                        Icons.error_outline_rounded,
-                                        color: Appcolors.kwhitecolor,
-                                        size: 38,
-                                      ),
-                                    )
-                                  : isReady
-                                  ? VideoPlayer(_controller)
-                                  : const Center(
-                                      child: CircularProgressIndicator(
-                                        color: Appcolors.kprimarycolor,
-                                      ),
+                  child: !isReady && !_hasError
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            color: Appcolors.kprimarycolor,
+                          ),
+                        )
+                      : Scrollbar(
+                          controller: _scrollController,
+                          thumbVisibility: showMacControls,
+                          child: SingleChildScrollView(
+                            controller: _scrollController,
+                            physics: const BouncingScrollPhysics(),
+                            child: Column(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: Container(
+                                    width: double.infinity,
+                                    color: const Color(0xFF111827),
+                                    child: AspectRatio(
+                                      aspectRatio: isReady
+                                          ? _controller.value.aspectRatio
+                                          : 16 / 9,
+                                      child: _hasError
+                                          ? Center(
+                                              child: Icon(
+                                                Icons.error_outline_rounded,
+                                                color: Appcolors.kwhitecolor,
+                                                size: isDesktop ? 48 : 38,
+                                              ),
+                                            )
+                                          : VideoPlayer(_controller),
                                     ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                if (isReady && !_hasError) ...[
+                                  VideoProgressIndicator(
+                                    _controller,
+                                    allowScrubbing: true,
+                                    colors: const VideoProgressColors(
+                                      playedColor: Appcolors.kprimarycolor,
+                                      bufferedColor: Color(0xFFFFD3C8),
+                                      backgroundColor: Color(0xFFE8DDD9),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: [
+                                      IconButton.filled(
+                                        onPressed: () {
+                                          _controller.value.isPlaying
+                                              ? _controller.pause()
+                                              : _controller.play();
+                                        },
+                                        style: IconButton.styleFrom(
+                                          backgroundColor:
+                                              Appcolors.kprimarycolor,
+                                          foregroundColor:
+                                              Appcolors.kwhitecolor,
+                                        ),
+                                        icon: Icon(
+                                          _controller.value.isPlaying
+                                              ? Icons.pause_rounded
+                                              : Icons.play_arrow_rounded,
+                                          size: isDesktop ? 28 : 24,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        _formatDuration(
+                                          _controller.value.position,
+                                        ),
+                                        style: TextStyle(
+                                          color: const Color(0xFF5A3A33),
+                                          fontSize: isDesktop ? 16 : 14,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      Text(
+                                        ' / ',
+                                        style: TextStyle(
+                                          color: const Color(0xFF7A6C66),
+                                          fontSize: isDesktop ? 16 : 14,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      Text(
+                                        _formatDuration(
+                                          _controller.value.duration,
+                                        ),
+                                        style: const TextStyle(
+                                          color: Color(0xFF7A6C66),
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        if (isReady && !_hasError) ...[
-                          VideoProgressIndicator(
-                            _controller,
-                            allowScrubbing: true,
-                            colors: const VideoProgressColors(
-                              playedColor: Appcolors.kprimarycolor,
-                              bufferedColor: Color(0xFFFFD3C8),
-                              backgroundColor: Color(0xFFE8DDD9),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              IconButton.filled(
-                                onPressed: () {
-                                  _controller.value.isPlaying
-                                      ? _controller.pause()
-                                      : _controller.play();
-                                },
-                                style: IconButton.styleFrom(
-                                  backgroundColor: Appcolors.kprimarycolor,
-                                  foregroundColor: Appcolors.kwhitecolor,
-                                ),
-                                icon: Icon(
-                                  _controller.value.isPlaying
-                                      ? Icons.pause_rounded
-                                      : Icons.play_arrow_rounded,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Text(
-                                _formatDuration(_controller.value.position),
-                                style: const TextStyle(
-                                  color: Color(0xFF5A3A33),
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const Text(
-                                ' / ',
-                                style: TextStyle(
-                                  color: Color(0xFF7A6C66),
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              Text(
-                                _formatDuration(_controller.value.duration),
-                                style: const TextStyle(
-                                  color: Color(0xFF7A6C66),
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
                 ),
               ],
             ),

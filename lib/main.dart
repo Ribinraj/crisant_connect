@@ -101,6 +101,20 @@ class MyApp extends StatelessWidget {
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
           ),
+          builder: (context, child) {
+            final mediaQuery = MediaQuery.of(context);
+            final isDesktop =
+                mediaQuery.size.width > ResponsiveUtils.desktopBreakpoint;
+
+            return MediaQuery(
+              data: mediaQuery.copyWith(
+                textScaler: isDesktop
+                    ? const TextScaler.linear(1.1)
+                    : mediaQuery.textScaler,
+              ),
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
           routerConfig: AppRouter.router,
         ),
       ),

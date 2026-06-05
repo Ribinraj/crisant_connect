@@ -89,11 +89,12 @@ class _ScreenNotificationsState extends State<ScreenNotifications> {
                         physics: const AlwaysScrollableScrollPhysics(
                           parent: BouncingScrollPhysics(),
                         ),
-                        padding: EdgeInsets.fromLTRB(
-                          ResponsiveUtils.wp(4.6),
-                          ResponsiveUtils.hp(1.8),
-                          ResponsiveUtils.wp(4.6),
-                          ResponsiveUtils.hp(4.5),
+                        padding: ResponsiveUtils.pagePadding(
+                          context,
+                          top: ResponsiveUtils.hp(1.8),
+                          bottom: ResponsiveUtils.isMobile(context)
+                              ? ResponsiveUtils.hp(4.5)
+                              : 36,
                         ),
                         itemCount: state.notifications.length + 1,
                         separatorBuilder: (_, index) => index == 0
@@ -101,17 +102,30 @@ class _ScreenNotificationsState extends State<ScreenNotifications> {
                             : const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           if (index == 0) {
-                            return _NotificationsHeader(
-                              unreadCount: state.unreadCount,
+                            return ResponsiveUtils.constrainWidth(
+                              context: context,
+                              maxWidth: ResponsiveUtils.isDesktop(context)
+                                  ? ResponsiveUtils.desktopReadableMaxWidth
+                                  : ResponsiveUtils.narrowPageMaxWidth,
+                              child: _NotificationsHeader(
+                                unreadCount: state.unreadCount,
+                              ),
                             );
                           }
 
                           final notification = state.notifications[index - 1];
-                          return _NotificationTile(
-                            notification: notification,
-                            isMarkingRead:
-                                state.readingNotificationId == notification.id,
-                            onTap: () => _markAsRead(notification),
+                          return ResponsiveUtils.constrainWidth(
+                            context: context,
+                            maxWidth: ResponsiveUtils.isDesktop(context)
+                                ? ResponsiveUtils.desktopReadableMaxWidth
+                                : ResponsiveUtils.narrowPageMaxWidth,
+                            child: _NotificationTile(
+                              notification: notification,
+                              isMarkingRead:
+                                  state.readingNotificationId ==
+                                  notification.id,
+                              onTap: () => _markAsRead(notification),
+                            ),
                           );
                         },
                       ),
@@ -134,17 +148,19 @@ class _NotificationsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return Row(
       children: [
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Notifications',
                 style: TextStyle(
                   color: Appcolors.ktextdark,
-                  fontSize: 24,
+                  fontSize: isDesktop ? 36 : 24,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -155,7 +171,7 @@ class _NotificationsHeader extends StatelessWidget {
                     : '$unreadCount unread notifications',
                 style: TextStyle(
                   color: Appcolors.ktextlight.withValues(alpha: 0.9),
-                  fontSize: 14,
+                  fontSize: isDesktop ? 18 : 14,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -163,14 +179,18 @@ class _NotificationsHeader extends StatelessWidget {
           ),
         ),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: EdgeInsets.symmetric(
+            horizontal: isDesktop ? 16 : 12,
+            vertical: isDesktop ? 11 : 8,
+          ),
           decoration: BoxDecoration(
             color: Appcolors.kprimarycolor.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(14),
           ),
-          child: const Icon(
+          child: Icon(
             Icons.notifications_active_rounded,
             color: Appcolors.kprimarycolor,
+            size: isDesktop ? 30 : 24,
           ),
         ),
       ],
@@ -191,6 +211,7 @@ class _NotificationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
     final isUnread = !notification.isRead;
 
     return Material(
@@ -199,7 +220,7 @@ class _NotificationTile extends StatelessWidget {
         borderRadius: BorderRadiusStyles.kradius15(),
         onTap: isUnread && !isMarkingRead ? onTap : null,
         child: Ink(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(isDesktop ? 22 : 16),
           decoration: BoxDecoration(
             color: isUnread
                 ? Appcolors.kwhitecolor
@@ -222,7 +243,7 @@ class _NotificationTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _NotificationIcon(type: notification.type, isUnread: isUnread),
-              const SizedBox(width: 12),
+              SizedBox(width: isDesktop ? 16 : 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -235,7 +256,7 @@ class _NotificationTile extends StatelessWidget {
                             notification.title,
                             style: TextStyle(
                               color: Appcolors.ktextdark,
-                              fontSize: 15.5,
+                              fontSize: isDesktop ? 18 : 15.5,
                               fontWeight: isUnread
                                   ? FontWeight.w900
                                   : FontWeight.w700,
@@ -261,7 +282,7 @@ class _NotificationTile extends StatelessWidget {
                       notification.body,
                       style: TextStyle(
                         color: Appcolors.ktextlight.withValues(alpha: 0.95),
-                        fontSize: 13.5,
+                        fontSize: isDesktop ? 16 : 13.5,
                         height: 1.35,
                         fontWeight: FontWeight.w600,
                       ),
@@ -308,7 +329,10 @@ class _NotificationTile extends StatelessWidget {
                                     color: Appcolors.kprimarycolor,
                                   ),
                                 )
-                              : const Icon(Icons.done_rounded, size: 18),
+                              : Icon(
+                                  Icons.done_rounded,
+                                  size: isDesktop ? 22 : 18,
+                                ),
                           label: const Text(
                             'Mark as read',
                             style: TextStyle(fontWeight: FontWeight.w800),
@@ -353,6 +377,7 @@ class _NotificationIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
     final icon = switch (type) {
       'lead_received' => Icons.person_add_alt_1_rounded,
       'approved' => Icons.check_circle_rounded,
@@ -360,8 +385,8 @@ class _NotificationIcon extends StatelessWidget {
     };
 
     return Container(
-      height: 44,
-      width: 44,
+      height: isDesktop ? 54 : 44,
+      width: isDesktop ? 54 : 44,
       decoration: BoxDecoration(
         color: isUnread
             ? Appcolors.kprimarycolor.withValues(alpha: 0.12)
@@ -371,6 +396,7 @@ class _NotificationIcon extends StatelessWidget {
       child: Icon(
         icon,
         color: isUnread ? Appcolors.kprimarycolor : Appcolors.ktextlight,
+        size: isDesktop ? 30 : 24,
       ),
     );
   }
@@ -384,8 +410,13 @@ class _NotificationMetaChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 12 : 9,
+        vertical: isDesktop ? 8 : 6,
+      ),
       decoration: BoxDecoration(
         color: Appcolors.kbackgroundcolor.withValues(alpha: 0.86),
         borderRadius: BorderRadius.circular(12),
@@ -393,14 +424,14 @@ class _NotificationMetaChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Appcolors.ktextlight),
-          const SizedBox(width: 5),
+          Icon(icon, size: isDesktop ? 17 : 14, color: Appcolors.ktextlight),
+          SizedBox(width: isDesktop ? 7 : 5),
           Flexible(
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Appcolors.ktextlight,
-                fontSize: 12,
+                fontSize: isDesktop ? 14 : 12,
                 fontWeight: FontWeight.w700,
               ),
             ),

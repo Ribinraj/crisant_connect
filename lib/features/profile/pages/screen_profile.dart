@@ -192,32 +192,70 @@ class _ScreenProfileState extends State<ScreenProfile> {
                               physics: const AlwaysScrollableScrollPhysics(
                                 parent: BouncingScrollPhysics(),
                               ),
-                              padding: EdgeInsets.fromLTRB(
-                                ResponsiveUtils.wp(4.6),
-                                ResponsiveUtils.hp(1.8),
-                                ResponsiveUtils.wp(4.6),
-                                ResponsiveUtils.hp(4.5),
+                              padding: ResponsiveUtils.pagePadding(
+                                context,
+                                top: ResponsiveUtils.hp(1.8),
+                                bottom: ResponsiveUtils.isMobile(context)
+                                    ? ResponsiveUtils.hp(4.5)
+                                    : 36,
                               ),
                               children: [
-                                _ProfileHeader(user: profileUser),
-                                SizedBox(height: ResponsiveUtils.hp(2)),
-                                _ProfileSummaryCard(user: profileUser),
-                                SizedBox(height: ResponsiveUtils.hp(2)),
-                                _ProfileFormCard(
-                                  formKey: _formKey,
-                                  nameController: _nameController,
-                                  mobileController: _mobileController,
-                                  isUpdating: isUpdating,
-                                  onSubmit: isUpdating || isLoggingOut
-                                      ? null
-                                      : () => _submit(profileUser),
-                                ),
-                                SizedBox(height: ResponsiveUtils.hp(2)),
-                                _LogoutTile(
-                                  isLoading: isLoggingOut,
-                                  onTap: isUpdating || isLoggingOut
-                                      ? null
-                                      : _confirmLogout,
+                                ResponsiveUtils.constrainWidth(
+                                  context: context,
+                                  maxWidth: ResponsiveUtils.isDesktop(context)
+                                      ? double.infinity
+                                      : ResponsiveUtils.narrowPageMaxWidth,
+                                  child: ResponsiveUtils.isDesktop(context)
+                                      ? _ProfileDesktopLayout(
+                                          user: profileUser,
+                                          formKey: _formKey,
+                                          nameController: _nameController,
+                                          mobileController: _mobileController,
+                                          isUpdating: isUpdating,
+                                          isLoggingOut: isLoggingOut,
+                                          onSubmit: isUpdating || isLoggingOut
+                                              ? null
+                                              : () => _submit(profileUser),
+                                          onLogout: isUpdating || isLoggingOut
+                                              ? null
+                                              : _confirmLogout,
+                                        )
+                                      : Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            _ProfileHeader(user: profileUser),
+                                            SizedBox(
+                                              height: ResponsiveUtils.hp(2),
+                                            ),
+                                            _ProfileSummaryCard(
+                                              user: profileUser,
+                                            ),
+                                            SizedBox(
+                                              height: ResponsiveUtils.hp(2),
+                                            ),
+                                            _ProfileFormCard(
+                                              formKey: _formKey,
+                                              nameController: _nameController,
+                                              mobileController:
+                                                  _mobileController,
+                                              isUpdating: isUpdating,
+                                              onSubmit:
+                                                  isUpdating || isLoggingOut
+                                                  ? null
+                                                  : () => _submit(profileUser),
+                                            ),
+                                            SizedBox(
+                                              height: ResponsiveUtils.hp(2),
+                                            ),
+                                            _LogoutTile(
+                                              isLoading: isLoggingOut,
+                                              onTap: isUpdating || isLoggingOut
+                                                  ? null
+                                                  : _confirmLogout,
+                                            ),
+                                          ],
+                                        ),
                                 ),
                               ],
                             ),
@@ -244,6 +282,65 @@ class _ScreenProfileState extends State<ScreenProfile> {
   }
 }
 
+class _ProfileDesktopLayout extends StatelessWidget {
+  final ProfileUser user;
+  final GlobalKey<FormState> formKey;
+  final TextEditingController nameController;
+  final TextEditingController mobileController;
+  final bool isUpdating;
+  final bool isLoggingOut;
+  final VoidCallback? onSubmit;
+  final VoidCallback? onLogout;
+
+  const _ProfileDesktopLayout({
+    required this.user,
+    required this.formKey,
+    required this.nameController,
+    required this.mobileController,
+    required this.isUpdating,
+    required this.isLoggingOut,
+    required this.onSubmit,
+    required this.onLogout,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ProfileHeader(user: user),
+        const SizedBox(height: 26),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                flex: 4,
+                child: _ProfileDesktopAccountPanel(
+                  user: user,
+                  isLoggingOut: isLoggingOut,
+                  onLogout: onLogout,
+                ),
+              ),
+              const SizedBox(width: 28),
+              Expanded(
+                flex: 8,
+                child: _ProfileFormCard(
+                  formKey: formKey,
+                  nameController: nameController,
+                  mobileController: mobileController,
+                  isUpdating: isUpdating,
+                  onSubmit: onSubmit,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _ProfileHeader extends StatelessWidget {
   final ProfileUser user;
 
@@ -251,6 +348,8 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return Row(
       children: [
         IconButton(
@@ -264,11 +363,11 @@ class _ProfileHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Profile',
                 style: TextStyle(
                   color: Appcolors.ktextdark,
-                  fontSize: 27,
+                  fontSize: isDesktop ? 40 : 27,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -278,9 +377,9 @@ class _ProfileHeader extends StatelessWidget {
                     : user.mobileNumber,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   color: Appcolors.ktextlight,
-                  fontSize: 13,
+                  fontSize: isDesktop ? 18 : 13,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -292,10 +391,16 @@ class _ProfileHeader extends StatelessWidget {
   }
 }
 
-class _ProfileSummaryCard extends StatelessWidget {
+class _ProfileDesktopAccountPanel extends StatelessWidget {
   final ProfileUser user;
+  final bool isLoggingOut;
+  final VoidCallback? onLogout;
 
-  const _ProfileSummaryCard({required this.user});
+  const _ProfileDesktopAccountPanel({
+    required this.user,
+    required this.isLoggingOut,
+    required this.onLogout,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -306,7 +411,103 @@ class _ProfileSummaryCard extends StatelessWidget {
     final initial = displayName.characters.first.toUpperCase();
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(36),
+      decoration: BoxDecoration(
+        color: Appcolors.kwhitecolor.withValues(alpha: 0.94),
+        borderRadius: BorderRadiusStyles.kradius15(),
+        border: Border.all(
+          color: Appcolors.kprimaryLightColor.withValues(alpha: 0.38),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Appcolors.kblackcolor.withValues(alpha: 0.025),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 112,
+            width: 112,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Appcolors.kprimaryLightColor.withValues(alpha: 0.42),
+              border: Border.all(color: Appcolors.kprimarycolor, width: 2),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              initial,
+              style: const TextStyle(
+                color: Appcolors.kprimarycolor,
+                fontSize: 40,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const SizedBox(height: 22),
+          Text(
+            displayName,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Appcolors.ktextdark,
+              fontSize: 31,
+              fontWeight: FontWeight.w900,
+              height: 1.12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            user.mobileNumber.isEmpty ? 'Account details' : user.mobileNumber,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Appcolors.ktextlight,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _ProfileChip(icon: Icons.badge_rounded, label: role),
+              _ProfileChip(
+                icon: Icons.verified_user_rounded,
+                label: user.leadsAccess ? 'Leads access' : 'Standard',
+              ),
+            ],
+          ),
+          const Spacer(),
+          const SizedBox(height: 24),
+          _LogoutTile(isLoading: isLoggingOut, onTap: onLogout),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileSummaryCard extends StatelessWidget {
+  final ProfileUser user;
+
+  const _ProfileSummaryCard({required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+    final avatarSize = isDesktop ? 82.0 : 68.0;
+    final displayName = user.fullName.trim().isEmpty
+        ? 'Crisant User'
+        : user.fullName.trim();
+    final role = user.role.trim().isEmpty ? 'User' : user.role.trim();
+    final initial = displayName.characters.first.toUpperCase();
+
+    return Container(
+      padding: EdgeInsets.all(isDesktop ? 26 : 18),
       decoration: BoxDecoration(
         color: Appcolors.kwhitecolor.withValues(alpha: 0.94),
         borderRadius: BorderRadiusStyles.kradius15(),
@@ -324,8 +525,8 @@ class _ProfileSummaryCard extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            height: 68,
-            width: 68,
+            height: avatarSize,
+            width: avatarSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Appcolors.kprimaryLightColor.withValues(alpha: 0.42),
@@ -385,8 +586,13 @@ class _ProfileChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 13 : 10,
+        vertical: isDesktop ? 8 : 6,
+      ),
       decoration: BoxDecoration(
         color: Appcolors.kprimaryLightColor.withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(18),
@@ -394,13 +600,13 @@ class _ProfileChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Appcolors.kprimarycolor),
-          const SizedBox(width: 5),
+          Icon(icon, size: isDesktop ? 18 : 14, color: Appcolors.kprimarycolor),
+          SizedBox(width: isDesktop ? 7 : 5),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               color: Appcolors.ktextdark,
-              fontSize: 12,
+              fontSize: isDesktop ? 14 : 12,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -427,8 +633,10 @@ class _ProfileFormCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(isDesktop ? 36 : 18),
       decoration: BoxDecoration(
         color: Appcolors.kwhitecolor.withValues(alpha: 0.94),
         borderRadius: BorderRadiusStyles.kradius15(),
@@ -448,15 +656,15 @@ class _ProfileFormCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
+            Text(
               'Personal Details',
               style: TextStyle(
                 color: Appcolors.ktextdark,
-                fontSize: 17,
+                fontSize: isDesktop ? 28 : 17,
                 fontWeight: FontWeight.w900,
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: isDesktop ? 28 : 16),
             _ProfileInput(
               controller: nameController,
               labelText: 'Full name',
@@ -470,7 +678,7 @@ class _ProfileFormCard extends StatelessWidget {
                 return null;
               },
             ),
-            const SizedBox(height: 14),
+            SizedBox(height: isDesktop ? 22 : 14),
             _ProfileInput(
               controller: mobileController,
               labelText: 'Mobile number',
@@ -485,9 +693,9 @@ class _ProfileFormCard extends StatelessWidget {
                 return null;
               },
             ),
-            const SizedBox(height: 18),
+            SizedBox(height: isDesktop ? 30 : 18),
             SizedBox(
-              height: 52,
+              height: isDesktop ? 64 : 52,
               child: ElevatedButton(
                 onPressed: onSubmit,
                 style: ElevatedButton.styleFrom(
@@ -512,10 +720,10 @@ class _ProfileFormCard extends StatelessWidget {
                           color: Appcolors.kwhitecolor,
                         ),
                       )
-                    : const Text(
+                    : Text(
                         'Save Changes',
                         style: TextStyle(
-                          fontSize: 15,
+                          fontSize: isDesktop ? 18 : 15,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
@@ -549,20 +757,22 @@ class _ProfileInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       textInputAction: textInputAction,
       validator: validator,
-      style: const TextStyle(
+      style: TextStyle(
         color: Appcolors.ktextdark,
-        fontSize: 15,
+        fontSize: isDesktop ? 18 : 15,
         fontWeight: FontWeight.w700,
       ),
       decoration: InputDecoration(
         filled: true,
         fillColor: Appcolors.kwhitecolor,
-        prefixIcon: Icon(prefixIcon),
+        prefixIcon: Icon(prefixIcon, size: isDesktop ? 26 : 22),
         prefixIconColor: Appcolors.kprimarycolor,
         labelText: labelText,
         hintText: hintText,
@@ -574,9 +784,9 @@ class _ProfileInput extends StatelessWidget {
           color: Appcolors.ktextlight.withValues(alpha: 0.7),
           fontWeight: FontWeight.w500,
         ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 18,
-          vertical: 17,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: isDesktop ? 20 : 18,
+          vertical: isDesktop ? 22 : 17,
         ),
         enabledBorder: _border(Appcolors.kprimaryLightColor, 0.46),
         focusedBorder: _border(Appcolors.kprimarycolor, 1),
@@ -602,6 +812,8 @@ class _LogoutTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return Material(
       color: Appcolors.kwhitecolor.withValues(alpha: 0.94),
       borderRadius: BorderRadius.circular(14),
@@ -611,7 +823,10 @@ class _LogoutTile extends StatelessWidget {
         child: Opacity(
           opacity: onTap == null ? 0.72 : 1,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: EdgeInsets.symmetric(
+              horizontal: isDesktop ? 22 : 16,
+              vertical: isDesktop ? 18 : 14,
+            ),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
@@ -621,8 +836,8 @@ class _LogoutTile extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  height: 44,
-                  width: 44,
+                  height: isDesktop ? 56 : 44,
+                  width: isDesktop ? 56 : 44,
                   decoration: BoxDecoration(
                     color: Appcolors.kredcolor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
@@ -635,21 +850,22 @@ class _LogoutTile extends StatelessWidget {
                             color: Appcolors.kredcolor,
                           ),
                         )
-                      : const Icon(
+                      : Icon(
                           Icons.logout_rounded,
                           color: Appcolors.kredcolor,
+                          size: isDesktop ? 30 : 24,
                         ),
                 ),
-                const SizedBox(width: 14),
+                SizedBox(width: isDesktop ? 18 : 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Logout',
                         style: TextStyle(
                           color: Appcolors.ktextdark,
-                          fontSize: 16,
+                          fontSize: isDesktop ? 19 : 16,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
@@ -658,18 +874,19 @@ class _LogoutTile extends StatelessWidget {
                         isLoading
                             ? 'Signing out...'
                             : 'Sign out from this device',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Appcolors.ktextlight,
-                          fontSize: 13,
+                          fontSize: isDesktop ? 15 : 13,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const Icon(
+                Icon(
                   Icons.chevron_right_rounded,
                   color: Appcolors.ktextlight,
+                  size: isDesktop ? 30 : 24,
                 ),
               ],
             ),
@@ -701,38 +918,46 @@ class _ProfileError extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsets.fromLTRB(
-        ResponsiveUtils.wp(6),
-        ResponsiveUtils.hp(12),
-        ResponsiveUtils.wp(6),
-        ResponsiveUtils.hp(4),
+      padding: ResponsiveUtils.pagePadding(
+        context,
+        mobileHorizontalPercent: 6,
+        top: ResponsiveUtils.hp(12),
+        bottom: ResponsiveUtils.hp(4),
       ),
       children: [
-        Icon(
-          Icons.account_circle_outlined,
-          color: Appcolors.kprimarycolor.withValues(alpha: 0.8),
-          size: 58,
-        ),
-        const SizedBox(height: 18),
-        Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Appcolors.ktextdark,
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 18),
-        Center(
-          child: FilledButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('Retry'),
-            style: FilledButton.styleFrom(
-              backgroundColor: Appcolors.kprimarycolor,
-              foregroundColor: Appcolors.kwhitecolor,
-            ),
+        ResponsiveUtils.constrainWidth(
+          context: context,
+          maxWidth: ResponsiveUtils.isDesktop(context)
+              ? ResponsiveUtils.desktopReadableMaxWidth
+              : ResponsiveUtils.narrowPageMaxWidth,
+          child: Column(
+            children: [
+              Icon(
+                Icons.account_circle_outlined,
+                color: Appcolors.kprimarycolor.withValues(alpha: 0.8),
+                size: 58,
+              ),
+              const SizedBox(height: 18),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Appcolors.ktextdark,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Appcolors.kprimarycolor,
+                  foregroundColor: Appcolors.kwhitecolor,
+                ),
+              ),
+            ],
           ),
         ),
       ],

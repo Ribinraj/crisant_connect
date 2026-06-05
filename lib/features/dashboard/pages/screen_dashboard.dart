@@ -5,6 +5,8 @@ import 'package:crisant_connect/features/dashboard/blocs/dashboard_bloc/dashboar
 import 'package:crisant_connect/features/dashboard/models/dashboard_response.dart';
 import 'package:crisant_connect/widgets/app_background.dart';
 import 'package:crisant_connect/widgets/crisant_app_bar.dart';
+import 'package:crisant_connect/widgets/social_platform_icon.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -51,39 +53,41 @@ class _ScreenDashboardState extends State<ScreenDashboard> {
             slivers: [
               const SliverToBoxAdapter(child: CrisantAppBar()),
               SliverPadding(
-                padding: EdgeInsets.fromLTRB(
-                  ResponsiveUtils.wp(4.6),
-                  ResponsiveUtils.hp(2),
-                  ResponsiveUtils.wp(4.6),
-                  ResponsiveUtils.hp(15),
+                padding: ResponsiveUtils.pagePadding(
+                  context,
+                  top: ResponsiveUtils.hp(2),
+                  bottom: ResponsiveUtils.bottomScrollPadding(context),
                 ),
                 sliver: SliverToBoxAdapter(
-                  child: BlocBuilder<DashboardBloc, DashboardState>(
-                    builder: (context, state) {
-                      if (state is DashboardLoading ||
-                          state is DashboardInitial) {
-                        return const _DashboardLoading();
-                      }
+                  child: ResponsiveUtils.constrainWidth(
+                    context: context,
+                    child: BlocBuilder<DashboardBloc, DashboardState>(
+                      builder: (context, state) {
+                        if (state is DashboardLoading ||
+                            state is DashboardInitial) {
+                          return const _DashboardLoading();
+                        }
 
-                      if (state is DashboardFailure) {
-                        return _DashboardError(
-                          message: state.message,
-                          onRetry: _fetchDashboard,
-                        );
-                      }
+                        if (state is DashboardFailure) {
+                          return _DashboardError(
+                            message: state.message,
+                            onRetry: _fetchDashboard,
+                          );
+                        }
 
-                      final dashboard = state is DashboardSuccess
-                          ? state.dashboard
-                          : null;
-                      if (dashboard == null) {
-                        return _DashboardError(
-                          message: 'Dashboard data unavailable',
-                          onRetry: _fetchDashboard,
-                        );
-                      }
+                        final dashboard = state is DashboardSuccess
+                            ? state.dashboard
+                            : null;
+                        if (dashboard == null) {
+                          return _DashboardError(
+                            message: 'Dashboard data unavailable',
+                            onRetry: _fetchDashboard,
+                          );
+                        }
 
-                      return _DashboardBody(dashboard: dashboard);
-                    },
+                        return _DashboardBody(dashboard: dashboard);
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -102,8 +106,13 @@ class _DashboardBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final titleSize = ResponsiveUtils.sp(5).clamp(18, 21).toDouble();
-    final subtitleSize = ResponsiveUtils.sp(4).clamp(15, 19).toDouble();
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+    final titleSize = isDesktop
+        ? 32.0
+        : ResponsiveUtils.sp(5).clamp(18, 21).toDouble();
+    final subtitleSize = isDesktop
+        ? 16.0
+        : ResponsiveUtils.sp(4).clamp(15, 19).toDouble();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -126,16 +135,34 @@ class _DashboardBody extends StatelessWidget {
             height: 1.45,
           ),
         ),
-        SizedBox(height: ResponsiveUtils.hp(3)),
+        SizedBox(height: isDesktop ? 28 : ResponsiveUtils.hp(3)),
         _StatsGrid(stats: dashboard.stats),
-        SizedBox(height: ResponsiveUtils.hp(3)),
-        _PostingOverviewCard(items: dashboard.monthlyPostingOverview),
-        SizedBox(height: ResponsiveUtils.hp(3)),
-        _PostingGapMonitor(gaps: dashboard.postingGapMonitor),
-        SizedBox(height: ResponsiveUtils.hp(3)),
-        const _RecentPostsHeader(),
-        SizedBox(height: ResponsiveUtils.hp(1.8)),
-        _RecentPostsList(posts: dashboard.recentPosts),
+        SizedBox(height: isDesktop ? 28 : ResponsiveUtils.hp(3)),
+        _PostingOverviewCard(
+          items: dashboard.monthlyPostingOverview,
+          month: dashboard.month,
+        ),
+        SizedBox(height: isDesktop ? 28 : ResponsiveUtils.hp(3)),
+        if (ResponsiveUtils.isDesktop(context))
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _PostingGapMonitor(gaps: dashboard.postingGapMonitor),
+                ),
+                const SizedBox(width: 18),
+                Expanded(
+                  child: _RecentPostsSection(posts: dashboard.recentPosts),
+                ),
+              ],
+            ),
+          )
+        else ...[
+          _PostingGapMonitor(gaps: dashboard.postingGapMonitor),
+          SizedBox(height: ResponsiveUtils.hp(3)),
+          _RecentPostsSection(posts: dashboard.recentPosts),
+        ],
       ],
     );
   }
@@ -148,10 +175,10 @@ class _StatsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    final spacing = ResponsiveUtils.wp(4).clamp(12, 18).toDouble();
-    final cardWidth = (width - ResponsiveUtils.wp(9.2) - spacing) / 2;
-    final cardHeight = cardWidth < 165 ? 205.0 : cardWidth * 1.04;
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+    final spacing = isDesktop
+        ? 20.0
+        : ResponsiveUtils.wp(4).clamp(12, 18).toDouble();
     final cards = [
       _StatCard(
         icon: Icons.groups_rounded,
@@ -166,7 +193,6 @@ class _StatsGrid extends StatelessWidget {
         value: stats.connectedProfiles.toString(),
         iconColor: const Color(0xFF087D80),
         iconBackground: const Color(0xFFE3F7F6),
-        highlighted: true,
       ),
       _StatCard(
         icon: Icons.send_time_extension_rounded,
@@ -184,15 +210,32 @@ class _StatsGrid extends StatelessWidget {
       ),
     ];
 
-    return Wrap(
-      spacing: spacing,
-      runSpacing: ResponsiveUtils.hp(2.1).clamp(14, 20).toDouble(),
-      children: cards
-          .map(
-            (card) =>
-                SizedBox(width: cardWidth, height: cardHeight, child: card),
-          )
-          .toList(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = ResponsiveUtils.gridColumns(
+          constraints.maxWidth,
+          tablet: constraints.maxWidth > 760 ? 4 : 2,
+          desktop: 4,
+        );
+        final cardWidth =
+            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+        final cardHeight = ResponsiveUtils.isMobile(context)
+            ? (cardWidth < 165 ? 205.0 : cardWidth * 1.04)
+            : isDesktop
+            ? cardWidth.clamp(182.0, 216.0).toDouble()
+            : cardWidth.clamp(150.0, 178.0).toDouble();
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: ResponsiveUtils.hp(2.1).clamp(14, 20).toDouble(),
+          children: cards
+              .map(
+                (card) =>
+                    SizedBox(width: cardWidth, height: cardHeight, child: card),
+              )
+              .toList(),
+        );
+      },
     );
   }
 }
@@ -203,7 +246,6 @@ class _StatCard extends StatelessWidget {
   final String value;
   final Color iconColor;
   final Color iconBackground;
-  final bool highlighted;
 
   const _StatCard({
     required this.icon,
@@ -211,13 +253,17 @@ class _StatCard extends StatelessWidget {
     required this.value,
     required this.iconColor,
     required this.iconBackground,
-    this.highlighted = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final cardPadding = ResponsiveUtils.wp(5).clamp(16, 24).toDouble();
-    final iconSize = ResponsiveUtils.wp(12).clamp(42, 48).toDouble();
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+    final cardPadding = isDesktop
+        ? 24.0
+        : ResponsiveUtils.wp(5).clamp(16, 24).toDouble();
+    final iconSize = isDesktop
+        ? 54.0
+        : ResponsiveUtils.wp(12).clamp(42, 48).toDouble();
     final compact = MediaQuery.sizeOf(context).width < 360;
 
     return Container(
@@ -232,71 +278,54 @@ class _StatCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Stack(
-        children: [
-          if (highlighted)
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: Container(
-                width: 4,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF087D80),
-                  borderRadius: BorderRadius.horizontal(
-                    left: Radius.circular(14),
-                  ),
-                ),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          cardPadding,
+          cardPadding,
+          cardPadding * 0.8,
+          cardPadding * 0.82,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: iconSize,
+              width: iconSize,
+              decoration: BoxDecoration(
+                color: iconBackground,
+                borderRadius: BorderRadiusStyles.kradius10(),
+              ),
+              child: Icon(icon, color: iconColor, size: iconSize * 0.52),
+            ),
+            const Spacer(),
+            Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: const Color(0xFF33211D),
+                fontSize: isDesktop
+                    ? 16.0
+                    : ResponsiveUtils.sp(compact ? 4 : 4.2).clamp(14, 18),
+                fontWeight: FontWeight.w500,
+                height: 1.22,
               ),
             ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              cardPadding,
-              cardPadding,
-              cardPadding * 0.8,
-              cardPadding * 0.82,
+            SizedBox(height: compact ? 3 : 5),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: const Color(0xFF0C1116),
+                fontSize: isDesktop
+                    ? 26.0
+                    : ResponsiveUtils.sp(5.2).clamp(17, 21),
+                fontWeight: FontWeight.w900,
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  height: iconSize,
-                  width: iconSize,
-                  decoration: BoxDecoration(
-                    color: iconBackground,
-                    borderRadius: BorderRadiusStyles.kradius10(),
-                  ),
-                  child: Icon(icon, color: iconColor, size: iconSize * 0.52),
-                ),
-                const Spacer(),
-                Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: const Color(0xFF33211D),
-                    fontSize: ResponsiveUtils.sp(
-                      compact ? 4 : 4.2,
-                    ).clamp(14, 18),
-                    fontWeight: FontWeight.w500,
-                    height: 1.22,
-                  ),
-                ),
-                SizedBox(height: compact ? 3 : 5),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: const Color(0xFF0C1116),
-                    fontSize: ResponsiveUtils.sp(5.2).clamp(17, 21),
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -304,8 +333,9 @@ class _StatCard extends StatelessWidget {
 
 class _PostingOverviewCard extends StatefulWidget {
   final List<MonthlyPostingOverviewItem> items;
+  final DashboardMonth month;
 
-  const _PostingOverviewCard({required this.items});
+  const _PostingOverviewCard({required this.items, required this.month});
 
   @override
   State<_PostingOverviewCard> createState() => _PostingOverviewCardState();
@@ -318,7 +348,8 @@ class _PostingOverviewCardState extends State<_PostingOverviewCard> {
   @override
   void didUpdateWidget(covariant _PostingOverviewCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.items.length != widget.items.length) {
+    if (oldWidget.items.length != widget.items.length ||
+        oldWidget.month.key != widget.month.key) {
       _didScrollToRecentDays = false;
       _scrollToRecentDays();
     }
@@ -331,7 +362,8 @@ class _PostingOverviewCardState extends State<_PostingOverviewCard> {
   }
 
   void _scrollToRecentDays() {
-    if (_didScrollToRecentDays || widget.items.length <= 7) return;
+    final visibleItems = _visibleChartItems();
+    if (_didScrollToRecentDays || visibleItems.length <= 7) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
       _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
@@ -339,9 +371,26 @@ class _PostingOverviewCardState extends State<_PostingOverviewCard> {
     });
   }
 
+  void _handleChartPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_scrollController.hasClients) return;
+
+    final delta = event.scrollDelta.dx.abs() > event.scrollDelta.dy.abs()
+        ? event.scrollDelta.dx
+        : event.scrollDelta.dy;
+    if (delta == 0) return;
+
+    final position = _scrollController.position;
+    final nextOffset = (_scrollController.offset + delta).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    _scrollController.jumpTo(nextOffset);
+  }
+
   @override
   Widget build(BuildContext context) {
     _scrollToRecentDays();
+    final visibleItems = _visibleChartItems();
 
     return _DashboardPanel(
       child: Column(
@@ -351,40 +400,104 @@ class _PostingOverviewCardState extends State<_PostingOverviewCard> {
             'Monthly Posting Overview',
             style: TextStyle(
               color: const Color(0xFF0C1116),
-              fontSize: ResponsiveUtils.sp(5).clamp(17, 20),
+              fontSize: ResponsiveUtils.isDesktop(context)
+                  ? 24
+                  : ResponsiveUtils.sp(5).clamp(17, 20),
               fontWeight: FontWeight.w800,
             ),
           ),
           SizedBox(height: ResponsiveUtils.hp(1.6).clamp(10, 16).toDouble()),
-          if (widget.items.isEmpty)
+          if (visibleItems.isEmpty)
             const _EmptyPanelMessage(message: 'No posting activity this month')
           else
             SizedBox(
-              height: ResponsiveUtils.hp(28).clamp(205, 245),
-              child: SingleChildScrollView(
-                controller: _scrollController,
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final item in widget.items) ...[
-                      SizedBox(
-                        width: 44,
-                        child: _DayBar(
-                          item: item,
-                          maxTotal: _maxPostingTotal(widget.items),
+              height: ResponsiveUtils.isDesktop(context)
+                  ? 320
+                  : ResponsiveUtils.hp(28).clamp(205, 245).toDouble(),
+              child: Listener(
+                onPointerSignal: _handleChartPointerSignal,
+                child: ScrollConfiguration(
+                  behavior: const _HorizontalChartScrollBehavior(),
+                  child: Scrollbar(
+                    controller: _scrollController,
+                    thumbVisibility: ResponsiveUtils.isDesktop(context),
+                    trackVisibility: ResponsiveUtils.isDesktop(context),
+                    notificationPredicate: (notification) =>
+                        notification.depth == 0,
+                    child: SingleChildScrollView(
+                      controller: _scrollController,
+                      scrollDirection: Axis.horizontal,
+                      physics: const ClampingScrollPhysics(),
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          bottom: ResponsiveUtils.isDesktop(context) ? 22 : 0,
+                          right: ResponsiveUtils.isDesktop(context) ? 8 : 0,
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (final item in visibleItems) ...[
+                              SizedBox(
+                                width: ResponsiveUtils.isDesktop(context)
+                                    ? 56
+                                    : 44,
+                                child: _DayBar(
+                                  item: item,
+                                  maxTotal: _maxPostingTotal(visibleItems),
+                                ),
+                              ),
+                              SizedBox(
+                                width: ResponsiveUtils.isDesktop(context)
+                                    ? 10
+                                    : 8,
+                              ),
+                            ],
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 8),
-                    ],
-                  ],
+                    ),
+                  ),
                 ),
               ),
             ),
         ],
       ),
     );
+  }
+
+  List<MonthlyPostingOverviewItem> _visibleChartItems() {
+    final items = List<MonthlyPostingOverviewItem>.from(widget.items)
+      ..sort((a, b) => _chartDate(a).compareTo(_chartDate(b)));
+    final now = DateTime.now();
+    final currentMonthKey =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}';
+
+    if (widget.month.key != currentMonthKey) return items;
+
+    final today = DateTime(now.year, now.month, now.day);
+    return items.where((item) {
+      final itemDate = _dateOnly(_chartDate(item));
+      return !itemDate.isAfter(today);
+    }).toList();
+  }
+
+  DateTime _chartDate(MonthlyPostingOverviewItem item) {
+    if (item.date != null) return item.date!.toLocal();
+
+    final monthParts = widget.month.key.split('-');
+    final now = DateTime.now();
+    final year = monthParts.isNotEmpty
+        ? int.tryParse(monthParts.first) ?? now.year
+        : now.year;
+    final month = monthParts.length > 1
+        ? int.tryParse(monthParts[1]) ?? now.month
+        : now.month;
+    final day = item.day > 0 ? item.day : 1;
+    return DateTime(year, month, day);
+  }
+
+  DateTime _dateOnly(DateTime value) {
+    return DateTime(value.year, value.month, value.day);
   }
 
   int _maxPostingTotal(List<MonthlyPostingOverviewItem> values) {
@@ -396,6 +509,19 @@ class _PostingOverviewCardState extends State<_PostingOverviewCard> {
   }
 }
 
+class _HorizontalChartScrollBehavior extends MaterialScrollBehavior {
+  const _HorizontalChartScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.invertedStylus,
+  };
+}
+
 class _DayBar extends StatelessWidget {
   final MonthlyPostingOverviewItem item;
   final int maxTotal;
@@ -404,11 +530,13 @@ class _DayBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        const labelHeight = 18.0;
-        const labelGap = 10.0;
-        const valueHeight = 24.0;
+        final labelHeight = isDesktop ? 22.0 : 18.0;
+        final labelGap = isDesktop ? 12.0 : 10.0;
+        final valueHeight = isDesktop ? 28.0 : 24.0;
         const valueGap = 8.0;
         final maxBarHeight =
             constraints.maxHeight -
@@ -428,9 +556,9 @@ class _DayBar extends StatelessWidget {
               child: Center(
                 child: Text(
                   item.total.toString(),
-                  style: const TextStyle(
-                    color: Color(0xFF5E6673),
-                    fontSize: 11,
+                  style: TextStyle(
+                    color: const Color(0xFF5E6673),
+                    fontSize: isDesktop ? 13 : 11,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -451,16 +579,16 @@ class _DayBar extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: labelGap),
+            SizedBox(height: labelGap),
             SizedBox(
               height: labelHeight,
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
                   item.label,
-                  style: const TextStyle(
-                    color: Color(0xFF202329),
-                    fontSize: 11,
+                  style: TextStyle(
+                    color: const Color(0xFF202329),
+                    fontSize: isDesktop ? 13 : 11,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -488,7 +616,9 @@ class _PostingGapMonitor extends StatelessWidget {
             'Posting Gap Monitor',
             style: TextStyle(
               color: const Color(0xFF0C1116),
-              fontSize: ResponsiveUtils.sp(5).clamp(17, 20),
+              fontSize: ResponsiveUtils.isDesktop(context)
+                  ? 24
+                  : ResponsiveUtils.sp(5).clamp(17, 20),
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -517,9 +647,10 @@ class _PostingGapTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
     final toneColor = _toneColor(gap.severity.tone);
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(isDesktop ? 18 : 14),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(12),
@@ -528,15 +659,19 @@ class _PostingGapTile extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            height: 42,
-            width: 42,
+            height: isDesktop ? 52 : 42,
+            width: isDesktop ? 52 : 42,
             decoration: BoxDecoration(
               color: toneColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(Icons.schedule_rounded, color: toneColor, size: 22),
+            child: Icon(
+              Icons.schedule_rounded,
+              color: toneColor,
+              size: isDesktop ? 28 : 22,
+            ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: isDesktop ? 16 : 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -545,9 +680,9 @@ class _PostingGapTile extends StatelessWidget {
                   gap.clientName.isEmpty ? 'Unknown client' : gap.clientName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF111827),
-                    fontSize: 14,
+                  style: TextStyle(
+                    color: const Color(0xFF111827),
+                    fontSize: isDesktop ? 16 : 14,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -558,9 +693,9 @@ class _PostingGapTile extends StatelessWidget {
                       : '${gap.gapDays} day gap',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF6E625E),
-                    fontSize: 12,
+                  style: TextStyle(
+                    color: const Color(0xFF6E625E),
+                    fontSize: isDesktop ? 14 : 12,
                     fontWeight: FontWeight.w600,
                     height: 1.25,
                   ),
@@ -603,8 +738,30 @@ class _RecentPostsHeader extends StatelessWidget {
       'Recent Posts',
       style: TextStyle(
         color: const Color(0xFF0C1116),
-        fontSize: ResponsiveUtils.sp(5.2).clamp(18, 21),
+        fontSize: ResponsiveUtils.isDesktop(context)
+            ? 24
+            : ResponsiveUtils.sp(5.2).clamp(18, 21),
         fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+}
+
+class _RecentPostsSection extends StatelessWidget {
+  final List<DashboardRecentPost> posts;
+
+  const _RecentPostsSection({required this.posts});
+
+  @override
+  Widget build(BuildContext context) {
+    return _DashboardPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _RecentPostsHeader(),
+          SizedBox(height: ResponsiveUtils.hp(1.6).clamp(10, 16).toDouble()),
+          _RecentPostsList(posts: posts),
+        ],
       ),
     );
   }
@@ -618,9 +775,7 @@ class _RecentPostsList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (posts.isEmpty) {
-      return const _DashboardPanel(
-        child: _EmptyPanelMessage(message: 'No recent posts found'),
-      );
+      return const _EmptyPanelMessage(message: 'No recent posts found');
     }
 
     return Column(
@@ -644,29 +799,37 @@ class _RecentPostTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final thumbSize = ResponsiveUtils.wp(13).clamp(46, 58).toDouble();
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+    final thumbSize = ResponsiveUtils.isMobile(context)
+        ? ResponsiveUtils.wp(13).clamp(46, 58).toDouble()
+        : isDesktop
+        ? 60.0
+        : 52.0;
     final compact = MediaQuery.sizeOf(context).width < 360;
     final platformColor = _platformColor(post.platform);
 
     return Container(
-      padding: EdgeInsets.all(ResponsiveUtils.wp(4).clamp(14, 18).toDouble()),
+      padding: EdgeInsets.all(isDesktop ? 18 : 14),
       decoration: BoxDecoration(
-        color: Appcolors.kwhitecolor.withValues(alpha: 0.96),
-        borderRadius: BorderRadiusStyles.kradius15(),
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE3E8EF)),
       ),
       child: Row(
         children: [
           Container(
-            height: thumbSize,
-            width: thumbSize,
+            height: isDesktop ? 52 : 42,
+            width: isDesktop ? 52 : 42,
             decoration: BoxDecoration(
-              color: platformColor,
-              borderRadius: BorderRadiusStyles.kradius10(),
+              color: platformColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(
-              _platformIcon(post.platform),
-              color: Appcolors.kwhitecolor,
-              size: thumbSize * 0.52,
+            child: Center(
+              child: SocialPlatformIcon(
+                platform: post.platform,
+                size: thumbSize * 0.48,
+                fallbackColor: platformColor,
+              ),
             ),
           ),
           SizedBox(width: ResponsiveUtils.wp(3.4).clamp(10, 18)),
@@ -680,19 +843,22 @@ class _RecentPostTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: const Color(0xFF1A2028),
-                    fontSize: ResponsiveUtils.sp(4.4).clamp(15, 18),
-                    fontWeight: FontWeight.w800,
+                    fontSize: isDesktop
+                        ? 16
+                        : ResponsiveUtils.sp(4.2).clamp(14, 16),
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
-                SizedBox(height: ResponsiveUtils.hp(0.4)),
+                const SizedBox(height: 4),
                 Text(
                   _recentPostMeta(post),
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: const Color(0xFF6E625E),
-                    fontSize: ResponsiveUtils.sp(4.2).clamp(14, 18),
-                    fontWeight: FontWeight.w400,
+                    fontSize: isDesktop ? 14 : 12,
+                    fontWeight: FontWeight.w600,
+                    height: 1.25,
                   ),
                 ),
               ],
@@ -726,13 +892,6 @@ class _RecentPostTile extends StatelessWidget {
     if (normalized.contains('facebook')) return const Color(0xFF1877F2);
     return const Color(0xFF3F5D62);
   }
-
-  IconData _platformIcon(String platform) {
-    final normalized = platform.toLowerCase();
-    if (normalized.contains('facebook')) return Icons.facebook_rounded;
-    if (normalized.contains('instagram')) return Icons.camera_alt_rounded;
-    return Icons.public_rounded;
-  }
 }
 
 class _StatusPill extends StatelessWidget {
@@ -743,9 +902,13 @@ class _StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
     final displayLabel = label.trim().isEmpty ? 'unknown' : label.trim();
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 12 : 10,
+        vertical: isDesktop ? 8 : 7,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(18),
@@ -756,7 +919,7 @@ class _StatusPill extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           color: color,
-          fontSize: 11,
+          fontSize: isDesktop ? 12.5 : 11,
           fontWeight: FontWeight.w800,
         ),
       ),
@@ -774,9 +937,9 @@ class _DashboardPanel extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(
-        ResponsiveUtils.wp(5.2),
+        ResponsiveUtils.wp(5.2).clamp(18, 26).toDouble(),
         ResponsiveUtils.hp(2.4),
-        ResponsiveUtils.wp(4.2),
+        ResponsiveUtils.wp(4.2).clamp(16, 24).toDouble(),
         ResponsiveUtils.hp(2.5),
       ),
       decoration: BoxDecoration(

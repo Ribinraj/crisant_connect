@@ -2,6 +2,7 @@ import 'package:crisant_connect/core/appconstants.dart';
 import 'package:crisant_connect/core/colors.dart';
 import 'package:crisant_connect/core/constants.dart';
 import 'package:crisant_connect/core/local_storage.dart';
+import 'package:crisant_connect/core/responsiveutils.dart';
 import 'package:crisant_connect/core/routes/approutes.dart';
 import 'package:crisant_connect/features/authentication/blocs/refresh_token_bloc/refresh_token_bloc.dart';
 import 'package:crisant_connect/widgets/app_background.dart';
@@ -254,14 +255,23 @@ class _SplashScreenState extends State<SplashScreen>
             opacity: _taglineFade,
             child: Column(
               children: [
-                TextStyles.headline(
-                  text: 'Crisant Connect',
-                  color: Appcolors.ktextdark,
+                Text(
+                  'Crisant Connect',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Appcolors.ktextdark,
+                    fontSize: ResponsiveUtils.sp(6).clamp(23, 34).toDouble(),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 ResponsiveSizedBox.height5,
-                TextStyles.caption(
-                  text: 'Bridging People · Empowering Lives',
-                  color: Appcolors.ktextlight,
+                Text(
+                  'Bridging People · Empowering Lives',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Appcolors.ktextlight,
+                    fontSize: ResponsiveUtils.sp(3).clamp(12, 16).toDouble(),
+                  ),
                 ),
               ],
             ),
@@ -312,9 +322,13 @@ class _SplashScreenState extends State<SplashScreen>
                   color: Appcolors.kprimaryLightColor.withValues(alpha: 0.45),
                 ),
               ),
-              child: TextStyles.caption(
-                text: 'Version 1.0.0',
-                color: Appcolors.ktextlight,
+              child: Text(
+                'Version 1.0.0',
+                style: TextStyle(
+                  color: Appcolors.ktextlight,
+                  fontSize: ResponsiveUtils.sp(2.8).clamp(11, 13).toDouble(),
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),

@@ -59,97 +59,122 @@ class _CrisantAppBarState extends State<CrisantAppBar> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return Container(
       padding: EdgeInsets.fromLTRB(
-        ResponsiveUtils.wp(4.6),
-        ResponsiveUtils.hp(1.8),
-        ResponsiveUtils.wp(4.6),
-        ResponsiveUtils.hp(1.5),
+        isDesktop ? 28 : ResponsiveUtils.wp(4.6),
+        isDesktop ? 14 : ResponsiveUtils.hp(1.8),
+        isDesktop ? 28 : ResponsiveUtils.wp(4.6),
+        isDesktop ? 14 : ResponsiveUtils.hp(1.5),
       ),
       decoration: BoxDecoration(
         color: Appcolors.kwhitecolor.withValues(alpha: 0.92),
-        boxShadow: [
-          BoxShadow(
-            color: Appcolors.kblackcolor.withValues(alpha: 0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        border: isDesktop
+            ? Border(
+                bottom: BorderSide(
+                  color: Appcolors.kprimaryLightColor.withValues(alpha: 0.34),
+                ),
+              )
+            : null,
+        boxShadow: isDesktop
+            ? null
+            : [
+                BoxShadow(
+                  color: Appcolors.kblackcolor.withValues(alpha: 0.04),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ],
       ),
-      child: Row(
-        children: [
-          if (widget.showBackButton) ...[
-            IconButton(
-              onPressed: () {
-                if (context.canPop()) {
-                  context.pop();
-                  return;
-                }
-                context.go(Approtes.dashboard);
-              },
-              icon: const Icon(Icons.arrow_back_rounded),
-              color: const Color(0xFF66758A),
-              tooltip: 'Back',
-            ),
-            SizedBox(width: ResponsiveUtils.wp(1)),
-          ],
-          Image.asset(
-            Appconstants.applogo,
-            height: ResponsiveUtils.wp(7.5).clamp(28, 34),
-            width: ResponsiveUtils.wp(8.5).clamp(32, 40),
-          ),
-          SizedBox(width: ResponsiveUtils.wp(2.3)),
-          Text(
-            'Crisant',
-            style: TextStyle(
-              color: const Color(0xFFD65A16),
-              fontSize: ResponsiveUtils.sp(5.5).clamp(20, 24),
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const Spacer(),
-          if (widget.showNotifications)
-            _hasNotificationsBloc
-                ? BlocBuilder<NotificationsBloc, NotificationsState>(
-                    buildWhen: (previous, current) =>
-                        previous.unreadCount != current.unreadCount,
-                    builder: (context, state) {
-                      return _NotificationButton(
-                        unreadCount: state.unreadCount,
-                        onTap: () => context.push(Approtes.notifications),
-                      );
-                    },
-                  )
-                : _NotificationButton(unreadCount: 0, onTap: () {}),
-          if (widget.showProfile) ...[
-            SizedBox(width: ResponsiveUtils.wp(1.4)),
-            Material(
-              color: Colors.transparent,
-              shape: const CircleBorder(),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: () => context.push(Approtes.profile),
-                child: Container(
-                  height: ResponsiveUtils.wp(8).clamp(38, 44),
-                  width: ResponsiveUtils.wp(8).clamp(38, 44),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Appcolors.kprimarycolor,
-                      width: 2,
-                    ),
-                    color: Appcolors.kprimaryLightColor.withValues(alpha: 0.45),
-                  ),
-                  child: const Icon(
-                    Icons.person_rounded,
-                    color: Appcolors.kprimarycolor,
-                    size: 26,
-                  ),
+      child: ResponsiveUtils.constrainWidth(
+        context: context,
+        child: SizedBox(
+          height: isDesktop ? 54 : null,
+          child: Row(
+            children: [
+              if (widget.showBackButton) ...[
+                IconButton(
+                  onPressed: () {
+                    if (context.canPop()) {
+                      context.pop();
+                      return;
+                    }
+                    context.go(Approtes.dashboard);
+                  },
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  color: const Color(0xFF66758A),
+                  tooltip: 'Back',
+                ),
+                SizedBox(width: ResponsiveUtils.wp(1)),
+              ],
+              Image.asset(
+                Appconstants.applogo,
+                height: isDesktop ? 40 : ResponsiveUtils.wp(7.5).clamp(28, 34),
+                width: isDesktop ? 46 : ResponsiveUtils.wp(8.5).clamp(32, 40),
+              ),
+              SizedBox(width: isDesktop ? 12 : ResponsiveUtils.wp(2.3)),
+              Text(
+                'Crisant',
+                style: TextStyle(
+                  color: const Color(0xFFD65A16),
+                  fontSize: isDesktop
+                      ? 28
+                      : ResponsiveUtils.sp(5.5).clamp(20, 24),
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-            ),
-          ],
-        ],
+              const Spacer(),
+              if (widget.showNotifications)
+                _hasNotificationsBloc
+                    ? BlocBuilder<NotificationsBloc, NotificationsState>(
+                        buildWhen: (previous, current) =>
+                            previous.unreadCount != current.unreadCount,
+                        builder: (context, state) {
+                          return _NotificationButton(
+                            unreadCount: state.unreadCount,
+                            onTap: () => context.push(Approtes.notifications),
+                          );
+                        },
+                      )
+                    : _NotificationButton(unreadCount: 0, onTap: () {}),
+              if (widget.showProfile) ...[
+                SizedBox(width: isDesktop ? 12 : ResponsiveUtils.wp(1.4)),
+                Material(
+                  color: Colors.transparent,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () => context.push(Approtes.profile),
+                    child: Container(
+                      height: isDesktop
+                          ? 50
+                          : ResponsiveUtils.wp(8).clamp(38, 44),
+                      width: isDesktop
+                          ? 50
+                          : ResponsiveUtils.wp(8).clamp(38, 44),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Appcolors.kprimarycolor,
+                          width: 2,
+                        ),
+                        color: Appcolors.kprimaryLightColor.withValues(
+                          alpha: 0.45,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.person_rounded,
+                        color: Appcolors.kprimarycolor,
+                        size: isDesktop ? 30 : 26,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -163,6 +188,7 @@ class _NotificationButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
     final badgeText = unreadCount > 99 ? '99+' : unreadCount.toString();
 
     return Stack(
@@ -170,7 +196,7 @@ class _NotificationButton extends StatelessWidget {
       children: [
         IconButton(
           onPressed: onTap,
-          icon: const Icon(Icons.notifications_rounded),
+          icon: Icon(Icons.notifications_rounded, size: isDesktop ? 30 : 24),
           color: const Color(0xFF66758A),
           tooltip: 'Notifications',
         ),
@@ -179,7 +205,10 @@ class _NotificationButton extends StatelessWidget {
             right: 4,
             top: 4,
             child: Container(
-              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+              constraints: BoxConstraints(
+                minWidth: isDesktop ? 21 : 18,
+                minHeight: isDesktop ? 21 : 18,
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 5),
               decoration: BoxDecoration(
                 color: Appcolors.kredcolor,
@@ -189,9 +218,9 @@ class _NotificationButton extends StatelessWidget {
               alignment: Alignment.center,
               child: Text(
                 badgeText,
-                style: const TextStyle(
+                style: TextStyle(
                   color: Appcolors.kwhitecolor,
-                  fontSize: 10,
+                  fontSize: isDesktop ? 11 : 10,
                   fontWeight: FontWeight.w900,
                 ),
               ),

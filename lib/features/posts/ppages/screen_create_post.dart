@@ -13,9 +13,14 @@ import 'package:crisant_connect/features/posts/models/posts_list_response.dart';
 import 'package:crisant_connect/widgets/app_background.dart';
 import 'package:crisant_connect/widgets/crisant_app_bar.dart';
 import 'package:crisant_connect/widgets/custom_snackbar.dart';
+import 'package:crisant_connect/widgets/local_image_preview.dart';
+import 'package:crisant_connect/widgets/video_thumbnail_preview.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ScreenCreatePost extends StatefulWidget {
@@ -29,6 +34,18 @@ class ScreenCreatePost extends StatefulWidget {
 }
 
 class _ScreenCreatePostState extends State<ScreenCreatePost> {
+  static const List<String> _driveAllowedExtensions = [
+    'jpg',
+    'jpeg',
+    'png',
+    'gif',
+    'webp',
+    'heic',
+    'mp4',
+    'mov',
+    'm4v',
+  ];
+
   static String _initialDateText() {
     final nextHour = DateTime.now().add(const Duration(hours: 1));
     return '${nextHour.month.toString().padLeft(2, '0')}/'
@@ -429,16 +446,77 @@ class _ScreenCreatePostState extends State<ScreenCreatePost> {
   }
 
   Future<void> _pickFromDrive() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.media,
-      allowMultiple: true,
-      withData: false,
+    final useUnfilteredDocumentPicker =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
+    debugPrint(
+      '[DrivePicker] Opening picker. platform=$defaultTargetPlatform '
+      'kIsWeb=$kIsWeb unfiltered=$useUnfilteredDocumentPicker',
     );
+
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.pickFiles(
+        type: useUnfilteredDocumentPicker ? FileType.any : FileType.custom,
+        allowedExtensions: useUnfilteredDocumentPicker
+            ? null
+            : _driveAllowedExtensions,
+        allowMultiple: true,
+        withData: false,
+      );
+    } on PlatformException catch (error, stackTrace) {
+      debugPrint(
+        '[DrivePicker] PlatformException code=${error.code} '
+        'message=${error.message} details=${error.details}',
+      );
+      debugPrint('[DrivePicker] PlatformException stackTrace=$stackTrace');
+      if (mounted) {
+        _showSnack(
+          'Google Drive picker error: ${error.message ?? error.code}',
+          type: SnackbarType.error,
+        );
+      }
+      return;
+    } catch (error, stackTrace) {
+      debugPrint('[DrivePicker] Unexpected error=$error');
+      debugPrint('[DrivePicker] Unexpected stackTrace=$stackTrace');
+      if (mounted) {
+        _showSnack('Google Drive picker error', type: SnackbarType.error);
+      }
+      return;
+    }
+
+    debugPrint('[DrivePicker] Picker result is null: ${result == null}');
     if (!mounted || result == null || result.files.isEmpty) return;
+
+    debugPrint('[DrivePicker] Files returned: ${result.files.length}');
+    for (final file in result.files) {
+      final nameExtension = _fileExtension(file.name);
+      final pathExtension = _fileExtension(file.path ?? '');
+      debugPrint(
+        '[DrivePicker] file name="${file.name}" path="${file.path}" '
+        'size=${file.size} nameExt="$nameExtension" pathExt="$pathExtension" '
+        'bytes=${file.bytes?.length} readStream=${file.readStream != null}',
+      );
+    }
+
+    final files = result.files.where(_isSupportedDriveCreative).toList();
+    final skippedCount = result.files.length - files.length;
+    debugPrint(
+      '[DrivePicker] Supported files: ${files.length}; skipped: $skippedCount',
+    );
+
+    if (files.isEmpty) {
+      _showSnack(
+        'Please select image or video files from Google Drive',
+        type: SnackbarType.warning,
+      );
+      return;
+    }
 
     setState(() {
       _selectedCreatives.addAll(
-        result.files.map(
+        files.map(
           (file) => _SelectedCreative.local(
             name: file.name,
             sourceLabel: 'Google Drive',
@@ -448,9 +526,30 @@ class _ScreenCreatePostState extends State<ScreenCreatePost> {
       );
     });
     _showSnack(
-      '${result.files.length} Drive file(s) selected',
+      skippedCount == 0
+          ? '${files.length} Drive file(s) selected'
+          : '${files.length} Drive file(s) selected, $skippedCount unsupported skipped',
       type: SnackbarType.success,
     );
+  }
+
+  bool _isSupportedDriveCreative(PlatformFile file) {
+    final extension = _fileExtension(file.name);
+    if (extension.isNotEmpty) {
+      return _driveAllowedExtensions.contains(extension);
+    }
+
+    final pathExtension = _fileExtension(file.path ?? '');
+    return pathExtension.isNotEmpty &&
+        _driveAllowedExtensions.contains(pathExtension);
+  }
+
+  String _fileExtension(String source) {
+    final name = source.trim().split('/').last;
+    final dotIndex = name.lastIndexOf('.');
+    if (dotIndex == -1 || dotIndex == name.length - 1) return '';
+
+    return name.substring(dotIndex + 1).toLowerCase();
   }
 
   Future<void> _openGalleryPicker() async {
@@ -493,8 +592,17 @@ class _ScreenCreatePostState extends State<ScreenCreatePost> {
     setState(() => _selectedCreatives.remove(creative));
   }
 
-  void _showSnack(String message, {SnackbarType type = SnackbarType.error}) {
-    CustomSnackbar.show(context, message: message, type: type);
+  void _showSnack(
+    String message, {
+    SnackbarType type = SnackbarType.error,
+    Duration duration = const Duration(seconds: 4),
+  }) {
+    CustomSnackbar.show(
+      context,
+      message: message,
+      type: type,
+      duration: duration,
+    );
   }
 
   @override
@@ -551,193 +659,21 @@ class _ScreenCreatePostState extends State<ScreenCreatePost> {
                     physics: const BouncingScrollPhysics(),
                     slivers: [
                       SliverPadding(
-                        padding: EdgeInsets.fromLTRB(
-                          ResponsiveUtils.wp(4.6),
-                          ResponsiveUtils.hp(2.2),
-                          ResponsiveUtils.wp(4.6),
-                          ResponsiveUtils.hp(15),
+                        padding: ResponsiveUtils.pagePadding(
+                          context,
+                          top: ResponsiveUtils.hp(2.2),
+                          bottom: ResponsiveUtils.bottomScrollPadding(context),
                         ),
                         sliver: SliverToBoxAdapter(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _PostIntroCard(isEditing: _isEditing),
-                              SizedBox(height: ResponsiveUtils.hp(2.4)),
-
-                              // ── Section label
-                              _FieldLabel('SELECT CLIENT'),
-                              ResponsiveSizedBox.height5,
-                              BlocBuilder<ClientsBloc, ClientsState>(
-                                builder: (context, state) {
-                                  final clients = state is ClientsSuccess
-                                      ? state.clients
-                                      : const <ClientModel>[];
-                                  final selectedValue =
-                                      clients.any(
-                                        (client) =>
-                                            client.id == _selectedClientId,
-                                      )
-                                      ? _selectedClientId
-                                      : null;
-
-                                  return _ClientDropdown(
-                                    value: selectedValue,
-                                    clients: clients,
-                                    isLoading: state is ClientsLoading,
-                                    errorMessage: state is ClientsFailure
-                                        ? state.message
-                                        : null,
-                                    onRetry: () => context
-                                        .read<ClientsBloc>()
-                                        .add(FetchClientsRequested()),
-                                    onChanged: (val) {
-                                      setState(() => _selectedClientId = val);
-                                    },
-                                  );
-                                },
-                              ),
-                              SizedBox(height: ResponsiveUtils.hp(2.4)),
-
-                              // ── Scheduled Time
-                              _FieldLabel('SCHEDULED TIME'),
-                              ResponsiveSizedBox.height5,
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _DatePickerField(
-                                      controller: _dateController,
-                                      hint: 'MM/DD/YYYY',
-                                      icon: Icons.calendar_today_rounded,
-                                    ),
-                                  ),
-                                  SizedBox(width: ResponsiveUtils.wp(3)),
-                                  Expanded(
-                                    child: _TimePickerField(
-                                      controller: _timeController,
-                                      hint: 'HH:MM AM',
-                                      icon: Icons.access_time_rounded,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: ResponsiveUtils.hp(2.4)),
-
-                              // ── Title
-                              _FieldLabel('TITLE'),
-                              ResponsiveSizedBox.height5,
-                              _StyledTextField(
-                                controller: _titleController,
-                                hint: 'Craft your title here...',
-                              ),
-                              SizedBox(height: ResponsiveUtils.hp(2.4)),
-
-                              // ── Caption
-                              _FieldLabel('CAPTION'),
-                              ResponsiveSizedBox.height5,
-                              _StyledTextField(
-                                controller: _captionController,
-                                hint: 'Craft your message here...',
-                                maxLines: 4,
-                              ),
-                              SizedBox(height: ResponsiveUtils.hp(2.8)),
-
-                              // ── Content Type & Creative Source Row
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        _FieldLabel('CONTENT TYPE'),
-                                        ResponsiveSizedBox.height5,
-                                        Wrap(
-                                          spacing: ResponsiveUtils.wp(2),
-                                          runSpacing: ResponsiveUtils.hp(0.8),
-                                          children: List.generate(
-                                            _contentTypes.length,
-                                            (i) => _ContentTypeChip(
-                                              label: _contentTypes[i],
-                                              isSelected:
-                                                  _selectedContentType == i,
-                                              onTap: () => setState(
-                                                () => _selectedContentType = i,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  SizedBox(width: ResponsiveUtils.wp(4)),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        _FieldLabel('CREATIVE SOURCE'),
-                                        ResponsiveSizedBox.height5,
-                                        _UploadButton(
-                                          selectedCount:
-                                              _selectedCreatives.length,
-                                          onTap: _openCreativeSourceSheet,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (_selectedCreatives.isNotEmpty) ...[
-                                SizedBox(height: ResponsiveUtils.hp(1.6)),
-                                _SelectedCreativesWrap(
-                                  creatives: _selectedCreatives,
-                                  onRemove: _removeCreative,
-                                ),
-                              ],
-                              SizedBox(height: ResponsiveUtils.hp(2.8)),
-
-                              // ── Social Preview
-                              _FieldLabel('SOCIAL PREVIEW'),
-                              ResponsiveSizedBox.height10,
-                              _SocialPreviewCard(
-                                creatives: _selectedCreatives,
-                                title: _titleController.text.trim(),
-                                caption: _captionController.text.trim(),
-                                client: selectedClient,
-                                contentType: _selectedContentTypeLabel,
-                                scheduledFor:
-                                    '${_dateController.text.trim()} ${_timeController.text.trim()}',
-                              ),
-                              SizedBox(height: ResponsiveUtils.hp(3.2)),
-
-                              // ── Review & Submit Button
-                              BlocBuilder<CreatePostBloc, CreatePostState>(
-                                builder: (context, createState) {
-                                  return BlocBuilder<
-                                    PostMutationBloc,
-                                    PostMutationState
-                                  >(
-                                    builder: (context, mutationState) {
-                                      final isCreating =
-                                          createState is CreatePostLoading;
-                                      final isEditing =
-                                          mutationState is EditPostLoading &&
-                                          mutationState.postId ==
-                                              widget.initialPost?.id;
-                                      final isLoading = isCreating || isEditing;
-                                      return _ReviewSubmitButton(
-                                        label: _isEditing
-                                            ? 'Update Post'
-                                            : 'Review & Submit',
-                                        isLoading: isLoading,
-                                        onTap: isLoading ? null : _submitPost,
-                                      );
-                                    },
-                                  );
-                                },
-                              ),
-                            ],
+                          child: ResponsiveUtils.constrainWidth(
+                            context: context,
+                            maxWidth: ResponsiveUtils.isDesktop(context)
+                                ? ResponsiveUtils.pageMaxWidth
+                                : ResponsiveUtils.formMaxWidth,
+                            child: _buildCreatePostContent(
+                              context,
+                              selectedClient,
+                            ),
                           ),
                         ),
                       ),
@@ -749,6 +685,240 @@ class _ScreenCreatePostState extends State<ScreenCreatePost> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildCreatePostContent(
+    BuildContext context,
+    ClientModel? selectedClient,
+  ) {
+    if (!ResponsiveUtils.isDesktop(context)) {
+      final formFields = _buildEditorFields(context);
+      final previewFields = _buildPreviewAndSubmit(context, selectedClient);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [...formFields, ...previewFields],
+      );
+    }
+
+    final formFields = [
+      ..._buildEditorFields(context, includeIntro: false),
+      const SizedBox(height: 24),
+      _buildSubmitButton(context),
+    ];
+    final previewFields = _buildPreviewFields(context, selectedClient);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _PostIntroCard(isEditing: _isEditing),
+        const SizedBox(height: 24),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 6,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: formFields,
+              ),
+            ),
+            const SizedBox(width: 28),
+            Expanded(
+              flex: 5,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: previewFields,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _buildEditorFields(
+    BuildContext context, {
+    bool includeIntro = true,
+  }) {
+    return [
+      if (includeIntro) ...[
+        _PostIntroCard(isEditing: _isEditing),
+        SizedBox(height: ResponsiveUtils.hp(2.4)),
+      ],
+      _FieldLabel('SELECT CLIENT'),
+      ResponsiveSizedBox.height5,
+      BlocBuilder<ClientsBloc, ClientsState>(
+        builder: (context, state) {
+          final clients = state is ClientsSuccess
+              ? state.clients
+              : const <ClientModel>[];
+          final selectedValue =
+              clients.any((client) => client.id == _selectedClientId)
+              ? _selectedClientId
+              : null;
+
+          return _ClientDropdown(
+            value: selectedValue,
+            clients: clients,
+            isLoading: state is ClientsLoading,
+            errorMessage: state is ClientsFailure ? state.message : null,
+            onRetry: () =>
+                context.read<ClientsBloc>().add(FetchClientsRequested()),
+            onChanged: (val) => setState(() => _selectedClientId = val),
+          );
+        },
+      ),
+      SizedBox(height: ResponsiveUtils.hp(2.4)),
+      _FieldLabel('SCHEDULED TIME'),
+      ResponsiveSizedBox.height5,
+      Row(
+        children: [
+          Expanded(
+            child: _DatePickerField(
+              controller: _dateController,
+              hint: 'MM/DD/YYYY',
+              icon: Icons.calendar_today_rounded,
+            ),
+          ),
+          SizedBox(width: ResponsiveUtils.wp(3).clamp(14, 24).toDouble()),
+          Expanded(
+            child: _TimePickerField(
+              controller: _timeController,
+              hint: 'HH:MM AM',
+              icon: Icons.access_time_rounded,
+            ),
+          ),
+        ],
+      ),
+      SizedBox(height: ResponsiveUtils.hp(2.4)),
+      _FieldLabel('TITLE'),
+      ResponsiveSizedBox.height5,
+      _StyledTextField(
+        controller: _titleController,
+        hint: 'Craft your title here...',
+      ),
+      SizedBox(height: ResponsiveUtils.hp(2.4)),
+      _FieldLabel('CAPTION'),
+      ResponsiveSizedBox.height5,
+      _StyledTextField(
+        controller: _captionController,
+        hint: 'Craft your message here...',
+        maxLines: 4,
+      ),
+      SizedBox(height: ResponsiveUtils.hp(2.8)),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _FieldLabel('CONTENT TYPE'),
+                ResponsiveSizedBox.height5,
+                Wrap(
+                  spacing: ResponsiveUtils.wp(2).clamp(8, 16).toDouble(),
+                  runSpacing: ResponsiveUtils.hp(0.8),
+                  children: List.generate(
+                    _contentTypes.length,
+                    (i) => _ContentTypeChip(
+                      label: _contentTypes[i],
+                      isSelected: _selectedContentType == i,
+                      onTap: () => setState(() => _selectedContentType = i),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: ResponsiveUtils.wp(4).clamp(16, 28).toDouble()),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _FieldLabel('CREATIVE SOURCE'),
+                ResponsiveSizedBox.height5,
+                _UploadButton(
+                  selectedCount: _selectedCreatives.length,
+                  onTap: _openCreativeSourceSheet,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      if (_selectedCreatives.isNotEmpty) ...[
+        SizedBox(height: ResponsiveUtils.hp(1.6)),
+        _SelectedCreativesWrap(
+          creatives: _selectedCreatives,
+          onRemove: _removeCreative,
+        ),
+      ],
+      SizedBox(
+        height: ResponsiveUtils.isDesktop(context)
+            ? 0
+            : ResponsiveUtils.hp(2.8),
+      ),
+    ];
+  }
+
+  List<Widget> _buildPreviewAndSubmit(
+    BuildContext context,
+    ClientModel? selectedClient,
+  ) {
+    return [
+      _FieldLabel('SOCIAL PREVIEW'),
+      ResponsiveSizedBox.height10,
+      _SocialPreviewCard(
+        creatives: _selectedCreatives,
+        title: _titleController.text.trim(),
+        caption: _captionController.text.trim(),
+        client: selectedClient,
+        contentType: _selectedContentTypeLabel,
+        scheduledFor:
+            '${_dateController.text.trim()} ${_timeController.text.trim()}',
+      ),
+      SizedBox(height: ResponsiveUtils.hp(3.2)),
+      _buildSubmitButton(context),
+    ];
+  }
+
+  List<Widget> _buildPreviewFields(
+    BuildContext context,
+    ClientModel? selectedClient,
+  ) {
+    return [
+      _FieldLabel('SOCIAL PREVIEW'),
+      ResponsiveSizedBox.height10,
+      _SocialPreviewCard(
+        creatives: _selectedCreatives,
+        title: _titleController.text.trim(),
+        caption: _captionController.text.trim(),
+        client: selectedClient,
+        contentType: _selectedContentTypeLabel,
+        scheduledFor:
+            '${_dateController.text.trim()} ${_timeController.text.trim()}',
+      ),
+    ];
+  }
+
+  Widget _buildSubmitButton(BuildContext context) {
+    return BlocBuilder<CreatePostBloc, CreatePostState>(
+      builder: (context, createState) {
+        return BlocBuilder<PostMutationBloc, PostMutationState>(
+          builder: (context, mutationState) {
+            final isCreating = createState is CreatePostLoading;
+            final isEditing =
+                mutationState is EditPostLoading &&
+                mutationState.postId == widget.initialPost?.id;
+            final isLoading = isCreating || isEditing;
+            return _ReviewSubmitButton(
+              label: _isEditing ? 'Update Post' : 'Review & Submit',
+              isLoading: isLoading,
+              onTap: isLoading ? null : _submitPost,
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -808,6 +978,8 @@ class _PostIntroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(
@@ -836,7 +1008,9 @@ class _PostIntroCard extends StatelessWidget {
                 : 'Create content for\nassigned clients',
             style: TextStyle(
               color: const Color(0xFF0C1116),
-              fontSize: ResponsiveUtils.sp(6.2).clamp(22, 26).toDouble(),
+              fontSize: isDesktop
+                  ? 32
+                  : ResponsiveUtils.sp(6.2).clamp(22, 26).toDouble(),
               fontWeight: FontWeight.w800,
               height: 1.22,
             ),
@@ -848,7 +1022,9 @@ class _PostIntroCard extends StatelessWidget {
                 : 'Draft, schedule, and preview your creative\nassets across multiple platforms.',
             style: TextStyle(
               color: const Color(0xFF7A6C66),
-              fontSize: ResponsiveUtils.sp(3.8).clamp(13, 15).toDouble(),
+              fontSize: isDesktop
+                  ? 17
+                  : ResponsiveUtils.sp(3.8).clamp(13, 15).toDouble(),
               fontWeight: FontWeight.w400,
               height: 1.48,
             ),
@@ -867,11 +1043,15 @@ class _FieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return Text(
       text,
       style: TextStyle(
         color: const Color(0xFF7A6C66),
-        fontSize: ResponsiveUtils.sp(3.2).clamp(10, 12).toDouble(),
+        fontSize: isDesktop
+            ? 14
+            : ResponsiveUtils.sp(3.2).clamp(10, 12).toDouble(),
         fontWeight: FontWeight.w700,
         letterSpacing: 0.9,
       ),
@@ -900,6 +1080,8 @@ class _ClientDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     if (errorMessage != null) {
       return Container(
         padding: EdgeInsets.symmetric(
@@ -909,10 +1091,10 @@ class _ClientDropdown extends StatelessWidget {
         decoration: _dropdownDecoration,
         child: Row(
           children: [
-            const Icon(
+            Icon(
               Icons.error_outline_rounded,
               color: Appcolors.kredcolor,
-              size: 18,
+              size: isDesktop ? 22 : 18,
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -922,7 +1104,9 @@ class _ClientDropdown extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: const Color(0xFF1A2028),
-                  fontSize: ResponsiveUtils.sp(3.7).clamp(13, 15).toDouble(),
+                  fontSize: isDesktop
+                      ? 17
+                      : ResponsiveUtils.sp(3.7).clamp(13, 15).toDouble(),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -953,12 +1137,15 @@ class _ClientDropdown extends StatelessWidget {
           borderRadius: BorderRadiusStyles.kradius10(),
           style: TextStyle(
             color: const Color(0xFF1A2028),
-            fontSize: ResponsiveUtils.sp(4.2).clamp(14, 16).toDouble(),
+            fontSize: isDesktop
+                ? 18
+                : ResponsiveUtils.sp(4.2).clamp(14, 16).toDouble(),
             fontWeight: FontWeight.w600,
           ),
-          icon: const Icon(
+          icon: Icon(
             Icons.keyboard_arrow_down_rounded,
             color: Color(0xFF7A6C66),
+            size: isDesktop ? 28 : 24,
           ),
           items: clients
               .map(
@@ -1009,6 +1196,8 @@ class _DatePickerField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return GestureDetector(
       onTap: () async {
         final picked = await showDatePicker(
@@ -1036,7 +1225,11 @@ class _DatePickerField extends StatelessWidget {
         child: _StyledTextField(
           controller: controller,
           hint: hint,
-          suffixIcon: Icon(icon, size: 18, color: const Color(0xFF7A6C66)),
+          suffixIcon: Icon(
+            icon,
+            size: isDesktop ? 24 : 18,
+            color: const Color(0xFF7A6C66),
+          ),
         ),
       ),
     );
@@ -1058,6 +1251,8 @@ class _TimePickerField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return GestureDetector(
       onTap: () async {
         final picked = await showTimePicker(
@@ -1085,7 +1280,11 @@ class _TimePickerField extends StatelessWidget {
         child: _StyledTextField(
           controller: controller,
           hint: hint,
-          suffixIcon: Icon(icon, size: 18, color: const Color(0xFF7A6C66)),
+          suffixIcon: Icon(
+            icon,
+            size: isDesktop ? 24 : 18,
+            color: const Color(0xFF7A6C66),
+          ),
         ),
       ),
     );
@@ -1109,6 +1308,8 @@ class _StyledTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return Container(
       decoration: BoxDecoration(
         color: Appcolors.kwhitecolor.withValues(alpha: 0.96),
@@ -1127,20 +1328,26 @@ class _StyledTextField extends StatelessWidget {
         maxLines: maxLines,
         style: TextStyle(
           color: const Color(0xFF1A2028),
-          fontSize: ResponsiveUtils.sp(4.2).clamp(14, 16).toDouble(),
+          fontSize: isDesktop
+              ? 18
+              : ResponsiveUtils.sp(4.2).clamp(14, 16).toDouble(),
           fontWeight: FontWeight.w500,
         ),
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(
             color: const Color(0xFFB0A09C),
-            fontSize: ResponsiveUtils.sp(4.2).clamp(14, 16).toDouble(),
+            fontSize: isDesktop
+                ? 18
+                : ResponsiveUtils.sp(4.2).clamp(14, 16).toDouble(),
             fontWeight: FontWeight.w400,
           ),
           suffixIcon: suffixIcon,
           contentPadding: EdgeInsets.symmetric(
             horizontal: ResponsiveUtils.wp(4).clamp(14, 18).toDouble(),
-            vertical: ResponsiveUtils.hp(1.6).clamp(12, 16).toDouble(),
+            vertical: isDesktop
+                ? 18
+                : ResponsiveUtils.hp(1.6).clamp(12, 16).toDouble(),
           ),
           border: InputBorder.none,
         ),
@@ -1164,6 +1371,8 @@ class _ContentTypeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -1171,7 +1380,9 @@ class _ContentTypeChip extends StatelessWidget {
         curve: Curves.easeInOutCubic,
         padding: EdgeInsets.symmetric(
           horizontal: ResponsiveUtils.wp(4).clamp(13, 18).toDouble(),
-          vertical: ResponsiveUtils.hp(0.8).clamp(6, 9).toDouble(),
+          vertical: isDesktop
+              ? 10
+              : ResponsiveUtils.hp(0.8).clamp(6, 9).toDouble(),
         ),
         decoration: BoxDecoration(
           color: isSelected
@@ -1198,7 +1409,9 @@ class _ContentTypeChip extends StatelessWidget {
           label,
           style: TextStyle(
             color: isSelected ? Appcolors.kwhitecolor : const Color(0xFF5A3A33),
-            fontSize: ResponsiveUtils.sp(3.8).clamp(12, 14).toDouble(),
+            fontSize: isDesktop
+                ? 16
+                : ResponsiveUtils.sp(3.8).clamp(12, 14).toDouble(),
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -1217,12 +1430,16 @@ class _UploadButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: EdgeInsets.symmetric(
           horizontal: ResponsiveUtils.wp(4).clamp(14, 18).toDouble(),
-          vertical: ResponsiveUtils.hp(1.2).clamp(9, 12).toDouble(),
+          vertical: isDesktop
+              ? 15
+              : ResponsiveUtils.hp(1.2).clamp(9, 12).toDouble(),
         ),
         decoration: BoxDecoration(
           color: const Color(0xFFFFF6F3),
@@ -1238,7 +1455,9 @@ class _UploadButton extends StatelessWidget {
             Icon(
               Icons.cloud_upload_rounded,
               color: Appcolors.kprimarycolor,
-              size: ResponsiveUtils.wp(5).clamp(18, 22).toDouble(),
+              size: isDesktop
+                  ? 28
+                  : ResponsiveUtils.wp(5).clamp(18, 22).toDouble(),
             ),
             SizedBox(width: ResponsiveUtils.wp(2)),
             Flexible(
@@ -1248,7 +1467,9 @@ class _UploadButton extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: Appcolors.kprimarycolor,
-                  fontSize: ResponsiveUtils.sp(3.5).clamp(11, 13).toDouble(),
+                  fontSize: isDesktop
+                      ? 15
+                      : ResponsiveUtils.sp(3.5).clamp(11, 13).toDouble(),
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.8,
                 ),
@@ -1318,10 +1539,8 @@ class _CreativeSourceSheet extends StatelessWidget {
     return _BottomActionShell(
       title: 'Creative source',
       maxHeightFactor: 0.64,
-      child: ListView(
-        shrinkWrap: true,
-        physics: const BouncingScrollPhysics(),
-        padding: EdgeInsets.zero,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: options
             .map(
               (option) => _SheetActionTile(
@@ -1451,39 +1670,53 @@ class _GalleryPickerSheetState extends State<_GalleryPickerSheet> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Flexible(
-                child: GridView.builder(
-                  controller: _scrollController,
-                  shrinkWrap: true,
-                  physics: const BouncingScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 0.92,
-                  ),
-                  itemCount:
-                      media.length +
-                      ((successState?.isLoadingMore ?? false) ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index >= media.length) {
-                      return const Center(
-                        child: CircularProgressIndicator(
-                          color: Appcolors.kprimarycolor,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final columns = ResponsiveUtils.gridColumns(
+                      constraints.maxWidth,
+                      tablet: 3,
+                      desktop: 4,
+                    );
+
+                    return Scrollbar(
+                      controller: _scrollController,
+                      thumbVisibility: ResponsiveUtils.isMacBook(context),
+                      child: GridView.builder(
+                        controller: _scrollController,
+                        shrinkWrap: true,
+                        physics: const BouncingScrollPhysics(),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: columns,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: 0.92,
                         ),
-                      );
-                    }
-                    final asset = media[index];
-                    final selected = _selectedIds.contains(asset.id);
-                    return _GalleryPickerTile(
-                      asset: asset,
-                      selected: selected,
-                      onTap: () {
-                        setState(() {
-                          selected
-                              ? _selectedIds.remove(asset.id)
-                              : _selectedIds.add(asset.id);
-                        });
-                      },
+                        itemCount:
+                            media.length +
+                            ((successState?.isLoadingMore ?? false) ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index >= media.length) {
+                            return const Center(
+                              child: CircularProgressIndicator(
+                                color: Appcolors.kprimarycolor,
+                              ),
+                            );
+                          }
+                          final asset = media[index];
+                          final selected = _selectedIds.contains(asset.id);
+                          return _GalleryPickerTile(
+                            asset: asset,
+                            selected: selected,
+                            onTap: () {
+                              setState(() {
+                                selected
+                                    ? _selectedIds.remove(asset.id)
+                                    : _selectedIds.add(asset.id);
+                              });
+                            },
+                          );
+                        },
+                      ),
                     );
                   },
                 ),
@@ -1560,6 +1793,12 @@ class _GalleryPickerTile extends StatelessWidget {
                         errorBuilder: (_, _, _) =>
                             _PickerAssetFallback(asset: asset),
                       )
+                    else if (asset.isVideo && asset.url.isNotEmpty)
+                      VideoThumbnailPreview(
+                        source: asset.resolvedUrl(Endpoints.mediaBaseUrl),
+                        fallback: _PickerAssetFallback(asset: asset),
+                        playBadgeSize: 44,
+                      )
                     else
                       _PickerAssetFallback(asset: asset),
                     Positioned(
@@ -1626,7 +1865,7 @@ class _PickerAssetFallback extends StatelessWidget {
   }
 }
 
-class _BottomActionShell extends StatelessWidget {
+class _BottomActionShell extends StatefulWidget {
   final String title;
   final Widget child;
   final double maxHeightFactor;
@@ -1640,18 +1879,37 @@ class _BottomActionShell extends StatelessWidget {
   });
 
   @override
+  State<_BottomActionShell> createState() => _BottomActionShellState();
+}
+
+class _BottomActionShellState extends State<_BottomActionShell> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final showMacControls = ResponsiveUtils.isMacBook(context);
 
     return SafeArea(
       bottom: false,
       child: Padding(
         padding: EdgeInsets.only(bottom: bottomInset),
         child: FractionallySizedBox(
-          heightFactor: maxHeightFactor,
+          heightFactor: widget.maxHeightFactor,
           alignment: Alignment.bottomCenter,
           child: Container(
-            width: double.infinity,
+            width: ResponsiveUtils.isDesktop(context) ? 720 : double.infinity,
+            constraints: BoxConstraints(
+              maxWidth: ResponsiveUtils.isDesktop(context)
+                  ? 720
+                  : double.infinity,
+            ),
             padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
             decoration: const BoxDecoration(
               color: Appcolors.kwhitecolor,
@@ -1672,22 +1930,40 @@ class _BottomActionShell extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Color(0xFF1A2028),
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.title,
+                        style: const TextStyle(
+                          color: Color(0xFF1A2028),
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    if (showMacControls)
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        tooltip: 'Close',
+                        icon: const Icon(Icons.close_rounded),
+                        color: const Color(0xFF7A6C66),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 14),
                 Flexible(
-                  child: scrollable
-                      ? SingleChildScrollView(
-                          physics: const BouncingScrollPhysics(),
-                          child: child,
+                  child: widget.scrollable
+                      ? Scrollbar(
+                          controller: _scrollController,
+                          thumbVisibility: showMacControls,
+                          child: SingleChildScrollView(
+                            controller: _scrollController,
+                            physics: const BouncingScrollPhysics(),
+                            child: widget.child,
+                          ),
                         )
-                      : child,
+                      : widget.child,
                 ),
               ],
             ),
@@ -1901,6 +2177,26 @@ class _SelectedCreative {
 
     return Uri.parse(mediaBaseUrl).resolve(normalizedUrl).toString();
   }
+
+  bool get hasLocalImagePath {
+    if (mediaAsset != null || apiMediaUrl.trim().isNotEmpty) return false;
+
+    final trimmedPath = path.trim();
+    if (trimmedPath.isEmpty) return false;
+
+    final uri = Uri.tryParse(trimmedPath);
+    return uri == null || !uri.hasScheme || uri.scheme == 'file';
+  }
+
+  String previewVideoSource(String baseUrl) {
+    if (mediaAsset != null) return mediaAsset!.resolvedUrl(baseUrl);
+
+    final hasApiSource =
+        apiMediaUrl.trim().isNotEmpty || apiDriveFileUrl.trim().isNotEmpty;
+    if (!hasApiSource && path.trim().isNotEmpty) return path.trim();
+
+    return resolvedMediaUrl(baseUrl);
+  }
 }
 
 enum _CreativeSourceAction {
@@ -2051,11 +2347,19 @@ class _SocialPreviewCard extends StatelessWidget {
             ),
           ),
 
-          Container(
-            height: ResponsiveUtils.hp(22).clamp(160, 200).toDouble(),
-            width: double.infinity,
-            color: const Color(0xFF17124B),
-            child: _PreviewCreativeCarousel(creatives: creatives),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final mediaHeight = ResponsiveUtils.isDesktop(context)
+                  ? (constraints.maxWidth * 0.74).clamp(300.0, 370.0)
+                  : ResponsiveUtils.hp(22).clamp(160, 200).toDouble();
+
+              return Container(
+                height: mediaHeight,
+                width: double.infinity,
+                color: const Color(0xFF17124B),
+                child: _PreviewCreativeCarousel(creatives: creatives),
+              );
+            },
           ),
 
           // ── Action icons row
@@ -2213,18 +2517,21 @@ class _PreviewCreativeCarouselState extends State<_PreviewCreativeCarousel> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          PageView.builder(
-            controller: _pageController,
-            physics: count > 1
-                ? const BouncingScrollPhysics()
-                : const NeverScrollableScrollPhysics(),
-            itemCount: count == 0 ? 1 : count,
-            onPageChanged: (page) => setState(() => _currentPage = page),
-            itemBuilder: (context, index) {
-              return _PreviewCreative(
-                creative: count == 0 ? null : widget.creatives[index],
-              );
-            },
+          ScrollConfiguration(
+            behavior: const _PreviewCarouselScrollBehavior(),
+            child: PageView.builder(
+              controller: _pageController,
+              physics: count > 1
+                  ? const BouncingScrollPhysics()
+                  : const NeverScrollableScrollPhysics(),
+              itemCount: count == 0 ? 1 : count,
+              onPageChanged: (page) => setState(() => _currentPage = page),
+              itemBuilder: (context, index) {
+                return _PreviewCreative(
+                  creative: count == 0 ? null : widget.creatives[index],
+                );
+              },
+            ),
           ),
           if (count > 1)
             Positioned(
@@ -2276,6 +2583,19 @@ class _PreviewCreativeCarouselState extends State<_PreviewCreativeCarousel> {
   }
 }
 
+class _PreviewCarouselScrollBehavior extends MaterialScrollBehavior {
+  const _PreviewCarouselScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.invertedStylus,
+  };
+}
+
 class _PreviewCreative extends StatelessWidget {
   final _SelectedCreative? creative;
 
@@ -2283,6 +2603,19 @@ class _PreviewCreative extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (creative != null && creative!.isVideo) {
+      final videoSource = creative!.previewVideoSource(Endpoints.mediaBaseUrl);
+      if (videoSource.isNotEmpty) {
+        return ClipRect(
+          child: VideoThumbnailPreview(
+            source: videoSource,
+            fallback: _PreviewPlaceholder(creative: creative),
+            playBadgeSize: 48,
+          ),
+        );
+      }
+    }
+
     final mediaAsset = creative?.mediaAsset;
     if (mediaAsset != null && mediaAsset.isImage && mediaAsset.url.isNotEmpty) {
       return ClipRect(
@@ -2296,6 +2629,24 @@ class _PreviewCreative extends StatelessWidget {
     }
 
     if (creative != null && creative!.isImage) {
+      if (creative!.hasLocalImagePath) {
+        debugPrint(
+          '[PreviewCreative] Rendering local image path="${creative!.path}"',
+        );
+        return ClipRect(
+          child: LocalImagePreview(
+            source: creative!.path,
+            fit: BoxFit.cover,
+            errorBuilder: (_, error, stackTrace) {
+              debugPrint(
+                '[PreviewCreative] Local image error=$error stackTrace=$stackTrace',
+              );
+              return _PreviewPlaceholder(creative: creative);
+            },
+          ),
+        );
+      }
+
       final imageUrl = creative!.resolvedMediaUrl(Endpoints.mediaBaseUrl);
       if (imageUrl.isNotEmpty) {
         return ClipRect(

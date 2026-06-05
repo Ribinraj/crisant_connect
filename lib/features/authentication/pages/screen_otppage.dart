@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:crisant_connect/core/appconstants.dart';
 import 'package:crisant_connect/core/colors.dart';
+import 'package:crisant_connect/core/responsiveutils.dart';
 import 'package:crisant_connect/core/routes/approutes.dart';
 import 'package:crisant_connect/features/authentication/blocs/verify_otp_bloc/verify_otp_bloc.dart';
 import 'package:crisant_connect/widgets/app_background.dart';
 import 'package:crisant_connect/widgets/custom_snackbar.dart';
+import 'package:crisant_connect/widgets/desktop_auth_layout.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -24,20 +26,14 @@ class _ScreenOtpPageState extends State<ScreenOtpPage> {
   static const int _otpLength = 6;
   static const int _resendSeconds = 30;
 
-  final List<TextEditingController> _controllers = List.generate(
-    _otpLength,
-    (_) => TextEditingController(),
-  );
-  final List<FocusNode> _focusNodes = List.generate(
-    _otpLength,
-    (_) => FocusNode(),
-  );
+  final TextEditingController _otpController = TextEditingController();
+  final FocusNode _otpFocusNode = FocusNode();
 
   Timer? _timer;
   int _secondsLeft = _resendSeconds;
 
   bool get _canResend => _secondsLeft == 0;
-  String get _otp => _controllers.map((controller) => controller.text).join();
+  String get _otp => _otpController.text;
 
   @override
   void initState() {
@@ -49,13 +45,8 @@ class _ScreenOtpPageState extends State<ScreenOtpPage> {
   void dispose() {
     _timer?.cancel();
 
-    for (final controller in _controllers) {
-      controller.dispose();
-    }
-
-    for (final focusNode in _focusNodes) {
-      focusNode.dispose();
-    }
+    _otpController.dispose();
+    _otpFocusNode.dispose();
 
     super.dispose();
   }
@@ -75,58 +66,21 @@ class _ScreenOtpPageState extends State<ScreenOtpPage> {
     });
   }
 
-  void _handleOtpChanged(String value, int index) {
-    if (value.length > 1) {
-      _fillOtp(value);
+  void _handleOtpChanged(String value) {
+    final digits = value.replaceAll(RegExp(r'\D'), '');
+    if (digits != value) {
+      _otpController.value = TextEditingValue(
+        text: digits,
+        selection: TextSelection.collapsed(offset: digits.length),
+      );
       return;
     }
 
     setState(() {});
 
-    if (value.isNotEmpty && index < _otpLength - 1) {
-      _focusNodes[index + 1].requestFocus();
-    }
-
     if (_otp.length == _otpLength) {
       _submitOtp();
     }
-  }
-
-  void _fillOtp(String value) {
-    final digits = value.replaceAll(RegExp(r'\D'), '');
-
-    for (var i = 0; i < _otpLength; i++) {
-      _controllers[i].text = i < digits.length ? digits[i] : '';
-    }
-
-    setState(() {});
-
-    final nextIndex = digits.length >= _otpLength
-        ? _otpLength - 1
-        : digits.length;
-    final safeNextIndex = nextIndex.clamp(0, _otpLength - 1);
-    _focusNodes[safeNextIndex].requestFocus();
-
-    if (_otp.length == _otpLength) {
-      _submitOtp();
-    }
-  }
-
-  KeyEventResult _handleBackspace(KeyEvent event, int index) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (event.logicalKey != LogicalKeyboardKey.backspace) {
-      return KeyEventResult.ignored;
-    }
-
-    if (_controllers[index].text.isNotEmpty || index == 0) {
-      return KeyEventResult.ignored;
-    }
-
-    _focusNodes[index - 1].requestFocus();
-    _controllers[index - 1].clear();
-    setState(() {});
-
-    return KeyEventResult.handled;
   }
 
   Future<void> _submitOtp() async {
@@ -155,11 +109,9 @@ class _ScreenOtpPageState extends State<ScreenOtpPage> {
   void _resendOtp() {
     if (!_canResend) return;
 
-    for (final controller in _controllers) {
-      controller.clear();
-    }
+    _otpController.clear();
 
-    _focusNodes.first.requestFocus();
+    _otpFocusNode.requestFocus();
     _startTimer();
 
     CustomSnackbar.show(
@@ -201,137 +153,187 @@ class _ScreenOtpPageState extends State<ScreenOtpPage> {
           body: AppBackground(
             opacity: 0.45,
             child: SafeArea(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 28,
-                  ),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 420),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Center(child: _LogoCard()),
-                        const SizedBox(height: 28),
-                        const Text(
-                          'Verify OTP',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Appcolors.ktextdark,
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
+              child: ResponsiveUtils.isDesktop(context)
+                  ? DesktopAuthLayout(
+                      title: 'Secure desktop\nverification',
+                      subtitle:
+                          'Confirm your sign-in and continue managing client content on a larger workspace.',
+                      form: _OtpForm(
+                        mobileNumber: mobileNumber,
+                        hasMobileNumber: hasMobileNumber,
+                        controller: _otpController,
+                        focusNode: _otpFocusNode,
+                        otpLength: _otpLength,
+                        otp: _otp,
+                        canResend: _canResend,
+                        secondsLeft: _secondsLeft,
+                        isLoading: isLoading,
+                        onChanged: _handleOtpChanged,
+                        onSubmit: _submitOtp,
+                        onResend: _resendOtp,
+                        showLogo: false,
+                      ),
+                    )
+                  : Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 28,
+                        ),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 420),
+                          child: _OtpForm(
+                            mobileNumber: mobileNumber,
+                            hasMobileNumber: hasMobileNumber,
+                            controller: _otpController,
+                            focusNode: _otpFocusNode,
+                            otpLength: _otpLength,
+                            otp: _otp,
+                            canResend: _canResend,
+                            secondsLeft: _secondsLeft,
+                            isLoading: isLoading,
+                            onChanged: _handleOtpChanged,
+                            onSubmit: _submitOtp,
+                            onResend: _resendOtp,
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          hasMobileNumber
-                              ? 'Enter the 6 digit code sent to +91 $mobileNumber'
-                              : 'Enter the 6 digit code sent to continue',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Appcolors.ktextlight,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 36),
-                        Row(
-                          children: [
-                            for (
-                              var index = 0;
-                              index < _otpLength;
-                              index++
-                            ) ...[
-                              if (index > 0) const SizedBox(width: 8),
-                              Expanded(
-                                child: _OtpBox(
-                                  controller: _controllers[index],
-                                  focusNode: _focusNodes[index],
-                                  onChanged: (value) =>
-                                      _handleOtpChanged(value, index),
-                                  onKeyEvent: (event) =>
-                                      _handleBackspace(event, index),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 28),
-                        SizedBox(
-                          height: 54,
-                          child: ElevatedButton(
-                            onPressed: isLoading || _otp.length != _otpLength
-                                ? null
-                                : _submitOtp,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Appcolors.kprimarycolor,
-                              foregroundColor: Appcolors.kwhitecolor,
-                              disabledBackgroundColor: Appcolors
-                                  .kprimaryLightColor
-                                  .withValues(alpha: 0.6),
-                              disabledForegroundColor: Appcolors.kwhitecolor
-                                  .withValues(alpha: 0.75),
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
-                            child: isLoading
-                                ? const SizedBox(
-                                    height: 22,
-                                    width: 22,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.4,
-                                      color: Appcolors.kwhitecolor,
-                                    ),
-                                  )
-                                : const Text(
-                                    'Submit',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        TextButton(
-                          onPressed: _canResend ? _resendOtp : null,
-                          child: Text(
-                            _canResend
-                                ? 'Resend OTP'
-                                : 'Resend OTP in $_secondsLeft seconds',
-                            style: TextStyle(
-                              color: _canResend
-                                  ? Appcolors.kprimarycolor
-                                  : Appcolors.ktextlight,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextButton(
-                          onPressed: () => Navigator.of(context).maybePop(),
-                          child: const Text(
-                            'Change mobile number',
-                            style: TextStyle(
-                              color: Appcolors.ktextlight,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
-              ),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+class _OtpForm extends StatelessWidget {
+  final String? mobileNumber;
+  final bool hasMobileNumber;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final int otpLength;
+  final String otp;
+  final bool canResend;
+  final int secondsLeft;
+  final bool isLoading;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onSubmit;
+  final VoidCallback onResend;
+  final bool showLogo;
+
+  const _OtpForm({
+    required this.mobileNumber,
+    required this.hasMobileNumber,
+    required this.controller,
+    required this.focusNode,
+    required this.otpLength,
+    required this.otp,
+    required this.canResend,
+    required this.secondsLeft,
+    required this.isLoading,
+    required this.onChanged,
+    required this.onSubmit,
+    required this.onResend,
+    this.showLogo = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (showLogo) ...[
+          Center(child: _LogoCard()),
+          const SizedBox(height: 28),
+        ],
+        const Text(
+          'Verify OTP',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Appcolors.ktextdark,
+            fontSize: 26,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          hasMobileNumber
+              ? 'Enter the 6 digit code sent to +91 $mobileNumber'
+              : 'Enter the 6 digit code sent to continue',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Appcolors.ktextlight,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 36),
+        _OtpInput(
+          controller: controller,
+          focusNode: focusNode,
+          length: otpLength,
+          onChanged: onChanged,
+        ),
+        const SizedBox(height: 28),
+        SizedBox(
+          height: 54,
+          child: ElevatedButton(
+            onPressed: isLoading || otp.length != otpLength ? null : onSubmit,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Appcolors.kprimarycolor,
+              foregroundColor: Appcolors.kwhitecolor,
+              disabledBackgroundColor: Appcolors.kprimaryLightColor.withValues(
+                alpha: 0.6,
+              ),
+              disabledForegroundColor: Appcolors.kwhitecolor.withValues(
+                alpha: 0.75,
+              ),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            child: isLoading
+                ? const SizedBox(
+                    height: 22,
+                    width: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.4,
+                      color: Appcolors.kwhitecolor,
+                    ),
+                  )
+                : const Text(
+                    'Submit',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 18),
+        TextButton(
+          onPressed: canResend ? onResend : null,
+          child: Text(
+            canResend ? 'Resend OTP' : 'Resend OTP in $secondsLeft seconds',
+            style: TextStyle(
+              color: canResend ? Appcolors.kprimarycolor : Appcolors.ktextlight,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: () => Navigator.of(context).maybePop(),
+          child: const Text(
+            'Change mobile number',
+            style: TextStyle(
+              color: Appcolors.ktextlight,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -343,56 +345,116 @@ class _LogoCard extends StatelessWidget {
   }
 }
 
-class _OtpBox extends StatelessWidget {
+class _OtpInput extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
+  final int length;
   final ValueChanged<String> onChanged;
-  final KeyEventResult Function(KeyEvent event) onKeyEvent;
 
-  const _OtpBox({
+  const _OtpInput({
     required this.controller,
     required this.focusNode,
+    required this.length,
     required this.onChanged,
-    required this.onKeyEvent,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 56,
-      child: Focus(
-        onKeyEvent: (_, event) => onKeyEvent(event),
-        child: TextField(
-          controller: controller,
-          focusNode: focusNode,
-          keyboardType: TextInputType.number,
-          textInputAction: TextInputAction.next,
-          textAlign: TextAlign.center,
-          maxLength: 1,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          onChanged: onChanged,
-          style: const TextStyle(
-            color: Appcolors.ktextdark,
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-          ),
-          decoration: InputDecoration(
-            counterText: '',
-            filled: true,
-            fillColor: Appcolors.kwhitecolor.withValues(alpha: 0.92),
-            contentPadding: EdgeInsets.zero,
-            enabledBorder: _border(Appcolors.kprimaryLightColor, 0.7),
-            focusedBorder: _border(Appcolors.kprimarycolor, 1),
-          ),
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: focusNode.requestFocus,
+      child: SizedBox(
+        height: isDesktop ? 68 : 56,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: Listenable.merge([controller, focusNode]),
+                builder: (context, _) {
+                  final text = controller.text;
+                  return Row(
+                    children: [
+                      for (var index = 0; index < length; index++) ...[
+                        if (index > 0) const SizedBox(width: 8),
+                        Expanded(
+                          child: _OtpDisplayBox(
+                            digit: index < text.length ? text[index] : '',
+                            active:
+                                focusNode.hasFocus &&
+                                (index == text.length ||
+                                    (text.length == length &&
+                                        index == length - 1)),
+                          ),
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              ),
+            ),
+            Positioned.fill(
+              child: TextField(
+                controller: controller,
+                focusNode: focusNode,
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.done,
+                maxLength: length,
+                enableSuggestions: false,
+                autocorrect: false,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(length),
+                ],
+                onChanged: onChanged,
+                showCursor: false,
+                style: const TextStyle(color: Colors.transparent, fontSize: 1),
+                decoration: const InputDecoration(
+                  counterText: '',
+                  border: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
 
-  OutlineInputBorder _border(Color color, double alpha) {
-    return OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: BorderSide(color: color.withValues(alpha: alpha), width: 1.4),
+class _OtpDisplayBox extends StatelessWidget {
+  final String digit;
+  final bool active;
+
+  const _OtpDisplayBox({required this.digit, required this.active});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDesktop = ResponsiveUtils.isDesktop(context);
+    final borderColor = active
+        ? Appcolors.kprimarycolor
+        : Appcolors.kprimaryLightColor.withValues(alpha: 0.7);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Appcolors.kwhitecolor.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor, width: active ? 1.8 : 1.4),
+      ),
+      child: Center(
+        child: Text(
+          digit,
+          style: TextStyle(
+            color: Appcolors.ktextdark,
+            fontSize: isDesktop ? 26 : 20,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
     );
   }
 }
